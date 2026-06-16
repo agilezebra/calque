@@ -1,0 +1,50 @@
+name: Gate
+
+# Reusable quality gate: lint, format, types, tests. Called by build.yml on
+# every push/PR and by publish.yml before a release to PyPI.
+on:
+  workflow_call:
+    inputs:
+      sonar:
+        description: Run the SonarQube Cloud scan (requires the SONAR_TOKEN secret).
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format
+        run: uv run ruff format --check .
+
+      - name: Types
+        run: uv run mypy .
+
+      - name: Test with coverage
+        run: uv run pytest --cov=calque --cov-report=xml --cov-report=term-missing
+
+      - name: SonarQube scan
+        if: inputs.sonar
+        uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
