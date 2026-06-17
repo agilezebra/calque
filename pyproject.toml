@@ -1,6 +1,6 @@
 [project]
 name = "calque"
-version = "0.1.1"
+dynamic = ["version"]
 description = "Mirrors events between calendars as anonymized busy blocks, using your local macOS calendar store (EventKit)."
 readme = "README.md"
 authors = [
@@ -34,8 +34,11 @@ Repository = "https://github.com/agilezebra/calque"
 Issues = "https://github.com/agilezebra/calque/issues"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
 
 [tool.uv]
 managed = true

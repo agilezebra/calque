@@ -14,8 +14,6 @@ jobs:
   publish:
     needs: gate
     runs-on: ubuntu-latest
-    # The environment lets you require a manual approval before publishing;
-    # configure reviewers under Settings -> Environments -> pypi.
     environment:
       name: pypi
       url: https://pypi.org/project/calque/
@@ -24,6 +22,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          fetch-depth: 0 # hatch-vcs derives the version from the full tag history
 
       - name: Set up uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
