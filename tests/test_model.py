@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from calque.model import MARKER, Event, Mirror, Participation, Plan, Tag, Window, tag, untag
+from calque.model import MARKER, Event, Mirror, Participation, Plan, Status, Tag, Window, tag, untag
 
 
 @pytest.fixture(autouse=True)
@@ -58,10 +58,18 @@ def test_window_renders_a_cross_day_range_with_the_end_date(start: datetime) -> 
 
 
 def test_event_exposes_window_bounds_and_renders(start: datetime) -> None:
-    event = Event("id", "Standup", "Client", window(start), Participation.ACCEPTED, all_day=False)
+    event = Event(
+        identifier="id",
+        title="Standup",
+        account="Client",
+        window=window(start),
+        all_day=False,
+        participation=Participation.ACCEPTED,
+        status=Status.CONFIRMED,
+    )
     assert event.start == start
     assert event.end == start + timedelta(hours=1)
-    assert str(event) == "title='Standup' Fri 2026-06-05 09:00 to 10:00"
+    assert str(event) == "title='Standup' window=Fri 2026-06-05 09:00 to 10:00 status=confirmed participation=accepted"
 
 
 def test_mirror_exposes_window_bounds_and_renders(start: datetime) -> None:

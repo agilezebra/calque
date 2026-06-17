@@ -9,6 +9,29 @@ Built for the case where your availability has to show up on calendars in differ
 
 By design, this is **not** a cloud service. Because calendars are already subscribed in macOS, calque talks only to the local EventKit store. There is **no authentication** required against any of the calendar providers, and no use of their APIs. This makes it suitable for use with **government clients** and other sensitive tenants that **forbid third-party tool** access.
 
+> [!TIP]
+> ## TL;DR
+>
+> Get running on macOS in a few commands (see [Getting started](#getting-started) for the detail):
+>
+> (Assuming you have [brew](https://brew.sh) and Python 3.13+ installed)
+>
+> ```sh
+> brew install uv          # skip if you already have uv
+> uv tool install calque   # install from PyPI, isolated and on your PATH
+> calque --list-calendars  # find your calendars' account-qualified names
+>
+> # Mirror your work and client calendars against each other, showing the real
+> # subject in your own work diary while the client sees only opaque busy blocks.
+> # Replace Work.Calendar and Client.Calendar with your names from --list-calendars.
+> calque Work.Calendar Client.Calendar \
+>   --title-to "Work.Calendar" "{account}: {title}" --dry-run      # preview the plan
+> calque Work.Calendar Client.Calendar \
+>   --title-to "Work.Calendar" "{account}: {title}"                # apply it once
+> calque Work.Calendar Client.Calendar \
+>   --title-to "Work.Calendar" "{account}: {title}" --install 120  # then every 120s
+> ```
+
 ## What it does
 
 - Reads events from the calendars you specify, in a configurable time window around the current time. The **first** calendar
@@ -36,10 +59,12 @@ By design, this is **not** a cloud service. Because calendars are already subscr
 - Python 3.13 or later.
 - Something to install Python packages: calque is a standard Python package — `uv`, `pipx` or `pip` all install it.
 
-[`pipx`](https://pipx.pypa.io/) is recommended for a command-line tool, as it puts calque in its
-own isolated environment and on your `PATH`:
+[`uv`](https://uv.io) or [`pipx`](https://pipx.pypa.io/) is recommended for a command-line tool,
+as it puts calque in an isolated environment on your `PATH`:
 
 ```sh
+uv tool install calque
+# or
 pipx install calque
 ```
 
@@ -213,6 +238,9 @@ Current rules:
 
 - **By status** — only events with a busy status are mirrored. The default busy status is only
   `accepted`, but you can override them on `Config`.
+- **Cancelled** — events the organiser has cancelled (EventKit reports them as cancelled, shown
+  struck through and greyed in Calendar.app) are never mirrored, so a meeting that's called off
+  drops its busy block instead of lingering.
 - **By title** — source events whose title matches any `--exclude-pattern` regular expression
   are skipped, so availability markers don't get mirrored as meetings. The default excludes a
   bare `Working` status block (`^Working$`) and any annual-leave marker (`\bA/L\b`). Pass one
@@ -230,6 +258,7 @@ Current rules:
   with `--no-exclude-clashes`.
 
 Example: skip any event whose title is exactly `Working`, contains `A/L` as a whole word, or is `Lunch`, and don't skip events that clash with existing events on the target:
+
 ```sh
 calque "Acme Consulting.Acme Consulting" "MoSW.Calendar" \
   --exclude-pattern "^Working$" "\bA/L\b" "\bLunch " --no-exclude-clashes

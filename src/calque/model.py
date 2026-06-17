@@ -9,27 +9,6 @@ from typing import Protocol
 MARKER = "⟦calque⟧"
 
 
-class Participation(Enum):
-    """The current user's response to an event invitation."""
-
-    ACCEPTED = "accepted"
-    TENTATIVE = "tentative"
-    DECLINED = "declined"
-    PENDING = "pending"
-    UNKNOWN = "unknown"
-
-
-class Source(Protocol):
-    """The slice of an EventKit ``EKSource`` we read: the account a calendar belongs to.
-
-    A narrowing of PyObjC's untyped objects; ``store.Calendar.source`` returns one.
-    """
-
-    def title(self) -> str:
-        """The account name (e.g. the Google or Exchange account behind the calendar)."""
-        ...
-
-
 @dataclass(frozen=True, slots=True)
 class Window:
     """A half-open time range in UTC — a query range or an interval occupied by an event."""
@@ -45,6 +24,36 @@ class Window:
         return f"{start:%a %Y-%m-%d %H:%M} to {until}"
 
 
+class Participation(Enum):
+    """The current user's response to an event invitation."""
+
+    ACCEPTED = "accepted"
+    TENTATIVE = "tentative"
+    DECLINED = "declined"
+    PENDING = "pending"
+    UNKNOWN = "unknown"
+
+
+class Status(Enum):
+    """The lifecycle status of an event itself (its iCalendar ``STATUS``), independent of participation."""
+
+    NONE = "none"
+    CONFIRMED = "confirmed"
+    TENTATIVE = "tentative"
+    CANCELLED = "cancelled"
+
+
+class Source(Protocol):
+    """The slice of an EventKit ``EKSource`` we read: the account a calendar belongs to.
+
+    A narrowing of PyObjC's untyped objects; ``store.Calendar.source`` returns one.
+    """
+
+    def title(self) -> str:
+        """The account name (e.g. the Google or Exchange account behind the calendar)."""
+        ...
+
+
 @dataclass(frozen=True, slots=True)
 class Event:
     """A source-calendar event reduced to the fields the mirror cares about."""
@@ -53,8 +62,9 @@ class Event:
     title: str
     account: str
     window: Window
-    participation: Participation
     all_day: bool
+    participation: Participation
+    status: Status
     notes: str | None = None
 
     @property
@@ -69,7 +79,7 @@ class Event:
 
     def __str__(self) -> str:
         """A human-readable representation of the event for logging and diagnostics."""
-        return f"title={self.title!r} {self.window}"
+        return f"title={self.title!r} window={self.window} status={self.status.value} participation={self.participation.value}"
 
 
 @dataclass(frozen=True, slots=True)

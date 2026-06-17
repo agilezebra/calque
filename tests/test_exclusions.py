@@ -18,9 +18,10 @@ from calque.exclusions import (
     excluded,
     included,
     is_all_day,
+    is_cancelled,
     rules,
 )
-from calque.model import Event, Participation, Window, tag
+from calque.model import Event, Participation, Status, Window, tag
 
 WORK_DAYS = frozenset({0, 1, 2, 3, 4})
 TARGET = "Target.Calendar"
@@ -47,10 +48,20 @@ def event(
     *,
     all_day: bool = False,
     participation: Participation = Participation.ACCEPTED,
+    status: Status = Status.CONFIRMED,
     notes: str | None = None,
 ) -> Event:
     window = Window(start, start + timedelta(hours=hours))
-    return Event("id", title, "Client", window, participation, all_day=all_day, notes=notes)
+    return Event(
+        identifier="id",
+        title=title,
+        account="Client",
+        window=window,
+        all_day=all_day,
+        participation=participation,
+        status=status,
+        notes=notes,
+    )
 
 
 def test_by_title_matches_any_pattern(start: datetime) -> None:
@@ -128,6 +139,24 @@ def test_by_hours_keeps_events_straddling_the_edge() -> None:
 def test_by_hours_excludes_events_on_non_working_days() -> None:
     rule = by_hours(WORK_DAYS, time(8), time(18))
     assert rule(event("weekend", datetime(2026, 6, 6, 9, 0, tzinfo=UTC)))  # Saturday 09:00
+
+
+def test_is_cancelled_excludes_only_cancelled_events(start: datetime) -> None:
+    assert is_cancelled(event("called off", start, status=Status.CANCELLED))
+    assert not is_cancelled(event("on", start, status=Status.CONFIRMED))
+
+
+def test_rules_excludes_cancelled_source_events(start: datetime) -> None:
+    exclusions = rules(Config(exclude_clashes=False), (), TARGET)
+    assert excluded(event("Canceled: Standup", start, status=Status.CANCELLED), exclusions)
+    assert not excluded(event("Standup", start, status=Status.CONFIRMED), exclusions)
+
+
+def test_rules_ignores_cancelled_busy_periods(start: datetime) -> None:
+    # A cancelled event in the target is not genuine busy, so it does not block a source event.
+    cancelled = event("Canceled: Workshop", start, status=Status.CANCELLED)
+    exclusions = rules(Config(), (cancelled,), TARGET)
+    assert not excluded(event("Standup", start), exclusions)
 
 
 def test_by_passed_excludes_only_finished_events() -> None:

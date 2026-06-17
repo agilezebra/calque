@@ -7,7 +7,7 @@ import pytest
 
 from calque import sync
 from calque.config import Config
-from calque.model import Event, Mirror, Participation, Window
+from calque.model import Event, Mirror, Participation, Status, Window
 from calque.sync import mirror, reconcile, synchronise, to_mirrors
 
 
@@ -17,8 +17,15 @@ def start() -> datetime:
 
 
 def event(identifier: str, start: datetime, participation: Participation = Participation.ACCEPTED) -> Event:
-    window = Window(start, start + timedelta(hours=1))
-    return Event(identifier, identifier, "Client", window, participation, all_day=False)
+    return Event(
+        identifier=identifier,
+        title=identifier,
+        account="Client",
+        window=Window(start, start + timedelta(hours=1)),
+        all_day=False,
+        participation=participation,
+        status=Status.CONFIRMED,
+    )
 
 
 def block(identifier: str, start: datetime, title: str = "Busy") -> Mirror:

@@ -14,7 +14,7 @@ import pytest
 
 from calque import store
 from calque.errors import AccessError, CalendarError, WriteError
-from calque.model import Mirror, Participation, Plan, Tag, Window, tag
+from calque.model import Mirror, Participation, Plan, Status, Tag, Window, tag
 
 
 @pytest.fixture
@@ -35,6 +35,7 @@ def stub_event(window: Window, **fields: object) -> Mock:
     item.title.return_value = fields.get("title", "Meeting")
     item.attendees.return_value = fields.get("attendees")
     item.isAllDay.return_value = fields.get("all_day", False)
+    item.status.return_value = fields.get("status", EventKit.EKEventStatusConfirmed)
     item.notes.return_value = fields.get("notes")
     return item
 
@@ -69,6 +70,24 @@ def test_to_event_folds_the_occurrence_start_into_the_identifier(start: datetime
 
 def test_to_event_substitutes_an_empty_title_when_absent(start: datetime) -> None:
     assert store.to_event(stub_event(window(start), title=None), "Client").title == ""
+
+
+def test_to_event_carries_the_cancellation_status(start: datetime) -> None:
+    item = stub_event(window(start), status=EventKit.EKEventStatusCanceled)
+    assert store.to_event(item, "Client").status == Status.CANCELLED
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (EventKit.EKEventStatusNone, Status.NONE),
+        (EventKit.EKEventStatusConfirmed, Status.CONFIRMED),
+        (EventKit.EKEventStatusTentative, Status.TENTATIVE),
+        (EventKit.EKEventStatusCanceled, Status.CANCELLED),
+    ],
+)
+def test_to_status_maps_each_status(status: int, expected: Status) -> None:
+    assert store.to_status(status) == expected
 
 
 @pytest.mark.parametrize(

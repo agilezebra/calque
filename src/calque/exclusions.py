@@ -11,7 +11,7 @@ from collections.abc import Callable, Container, Iterable, Iterator
 from datetime import UTC, date, datetime, time, timedelta
 
 from calque.config import Config
-from calque.model import Event, Participation, untag
+from calque.model import Event, Participation, Status, untag
 
 Exclusion = Callable[[Event], bool]
 
@@ -99,6 +99,14 @@ def is_all_day(event: Event) -> bool:
     return result
 
 
+def is_cancelled(event: Event) -> bool:
+    """Whether the event has been cancelled according to its status."""
+    result = event.status is Status.CANCELLED
+    if result:
+        logging.debug("excluding %r as cancelled", event.title)
+    return result
+
+
 def by_participation(statuses: frozenset[Participation]) -> Exclusion:
     """Build a rule excluding events whose participation is not among the mirrored statuses."""
 
@@ -141,6 +149,7 @@ def rules(config: Config, events: Iterable[Event], target: str) -> tuple[Exclusi
     The full exclusion chain:
     - intrinsic rules:
       - participation status
+      - cancelled events
       - title patterns
       - all-day
       - out-of-hours
@@ -156,6 +165,7 @@ def rules(config: Config, events: Iterable[Event], target: str) -> tuple[Exclusi
 
     def build() -> Iterable[Exclusion]:
         yield by_participation(config.statuses)
+        yield is_cancelled
         if config.exclude_patterns:
             yield by_title(config.exclude_patterns)
         if config.exclude_all_day:

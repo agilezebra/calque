@@ -1,6 +1,6 @@
 [project]
 name = "calque"
-version = "0.1.0"
+version = "0.1.1"
 description = "Mirrors events between calendars as anonymized busy blocks, using your local macOS calendar store (EventKit)."
 readme = "README.md"
 authors = [
@@ -92,6 +92,7 @@ dummy-variable-rgx = "_+|unused|.*_unused"
     "S101",    # asserts are the point of a test
     "D103",    # test functions document themselves through their names
     "PLR2004", # literal comparisons are normal in test assertions
+    "PLR0913", # event-building helpers take one keyword per overridable field
     "INP001",  # the test tree is deliberately not an importable package
 ]
 

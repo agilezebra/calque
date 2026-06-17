@@ -15,7 +15,7 @@ import EventKit
 import Foundation
 
 from calque.errors import AccessError, CalendarError, WriteError
-from calque.model import Event, Mirror, Participation, Plan, Source, Tag, Window, tag, untag
+from calque.model import Event, Mirror, Participation, Plan, Source, Status, Tag, Window, tag, untag
 
 
 def to_nsdate(value: datetime) -> Any:
@@ -44,8 +44,9 @@ def to_event(item: Any, account: str) -> Event:
         title=item.title() or "",
         account=account,
         window=to_window(item),
-        participation=response(item),
         all_day=bool(item.isAllDay()),
+        participation=response(item),
+        status=to_status(item.status()),
         notes=item.notes(),
     )
 
@@ -63,6 +64,19 @@ def to_participation(status: int) -> Participation:
             return Participation.PENDING
         case _:
             return Participation.UNKNOWN
+
+
+def to_status(status: int) -> Status:
+    """Map an ``EKEventStatus`` code to a status value."""
+    match status:
+        case EventKit.EKEventStatusConfirmed:
+            return Status.CONFIRMED
+        case EventKit.EKEventStatusTentative:
+            return Status.TENTATIVE
+        case EventKit.EKEventStatusCanceled:
+            return Status.CANCELLED
+        case _:
+            return Status.NONE
 
 
 def response(item: Any) -> Participation:

@@ -178,7 +178,7 @@ def main(arguments: list[str] | None = None) -> int:
     """Dispatch one calque invocation — list, install, uninstall, or sync — and return a process exit code."""
     arguments = sys.argv[1:] if arguments is None else arguments
     options = parse_arguments(arguments)
-    logging.basicConfig(level=options.logging.upper(), format="%(levelname)s: %(message)s")
+    logging.basicConfig(level=options.logging.upper(), format="%(asctime)s:%(levelname)s: %(message)s")
 
     try:
         if options.list_calendars:
