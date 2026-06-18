@@ -36,8 +36,8 @@ By design, this is **not** a cloud service. Because calendars are already subscr
 
 - Reads events from the calendars you specify, in a configurable time window around the current time. The **first** calendar
   you list is the **primary**; the rest are mirrored against it.
-- Mirrors only the events you've **accepted** (tentative, declined, and unanswered are skipped by default).
-  The set of statuses that count as busy is configurable.
+- Mirrors only the events you've **accepted** or that have no response (`unknown`); tentative, declined, and
+  pending are skipped by default. The set of statuses that count as busy is configurable with `--statuses`.
 - Drops any event an **exclusion rule** rejects: by title pattern, time, or because the target
   calendar is already busy over that slot (see [Exclusions](#exclusions)).
 - Writes one block per mirrored event with a **templated title**
@@ -177,6 +177,8 @@ calque --uninstall
 - **`--lookahead DAYS`** — days after now to mirror (default `60`).
 - **`--cleanup`** / **`--no-cleanup`** — remove a mirror block once its event is over, instead of
   keeping it for the lookback window (default off).
+- **`--statuses STATUS …`** — participation responses that count as busy and get mirrored, from
+  `accepted`, `tentative`, `declined`, `pending`, `unknown` (default `accepted unknown`).
 - **`--exclude-pattern REGEX …`** — replace the default title-exclusion patterns (see
   [Exclusions](#exclusions)).
 - **`--exclude-clashes`** / **`--no-exclude-clashes`** — skip a source event that overlaps a genuine
@@ -191,8 +193,8 @@ calque --uninstall
 - **`--uninstall`** — remove the installed `launchd` agent and exit.
 - **`--logging LEVEL`** — logging level (default `info`; `debug` shows why each event was kept or
   excluded).
-Be careful not to place variadic options (`--mute`, `--exclude-pattern`) immediately before the calendar arguments,
-or they will swallow them.
+Be careful not to place variadic options (`--mute`, `--exclude-pattern`, `--statuses`) immediately before the
+calendar arguments, or they will swallow them.
 
 ## Titles
 
@@ -275,5 +277,7 @@ the hub so it can't act as a hub for mirroring.
 ## Status filtering
 
 Your response is read from the event's attendee list.
-Only events you've accepted are mirrored by default (the busy statuses are configurable on
-`Config`). Events with no attendees (blocks you created yourself) are treated as implicitly accepted.
+By default, events you've **accepted** and events with no clear response (`unknown`) are mirrored; tentative,
+declined, and pending invitations are skipped. Choose the responses that count as busy with `--statuses`,
+e.g. `--statuses accepted tentative`. Events with no attendees (blocks you created yourself) are treated as
+implicitly accepted.

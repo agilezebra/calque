@@ -10,6 +10,7 @@ from typing import Any, cast
 
 from calque.config import DEFAULT_EXCLUDES, Config
 from calque.errors import CalqueError
+from calque.model import Participation
 from calque.service import install, uninstall
 from calque.store import CalendarStore
 from calque.sync import synchronise
@@ -123,6 +124,19 @@ def parse_arguments(arguments: list[str] | None) -> Namespace:
         default=tuple(re.compile(pattern) for pattern in DEFAULT_EXCLUDES),
         metavar="REGEX",
         help="Exclude calendar events with titles that match any of these patterns",
+    )
+    parser.add_argument(
+        "--statuses",
+        nargs="+",
+        type=Participation,
+        action=CollectSet,
+        default=frozenset({Participation.ACCEPTED, Participation.UNKNOWN}),
+        metavar="STATUS",
+        help=(
+            "participation responses that count as busy and get mirrored, from "
+            f"{{{', '.join(status.value for status in Participation)}}} "
+            "(default: accepted, unknown)"
+        ),
     )
     parser.add_argument(
         "--exclude-clashes",

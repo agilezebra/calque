@@ -209,15 +209,16 @@ def test_by_participation_excludes_unmirrored_statuses(start: datetime) -> None:
 
 
 def test_rules_excludes_source_events_by_participation(start: datetime) -> None:
-    exclusions = rules(Config(), (), TARGET)  # default statuses mirror ACCEPTED only
+    exclusions = rules(Config(statuses=frozenset({Participation.ACCEPTED, Participation.UNKNOWN})), (), TARGET)
     assert excluded(event("tentative", start, participation=Participation.TENTATIVE), exclusions)
     assert not excluded(event("accepted", start), exclusions)
+    assert not excluded(event("unknown", start, participation=Participation.UNKNOWN), exclusions)
 
 
 def test_rules_ignores_busy_periods_with_unmirrored_participation(start: datetime) -> None:
     # A declined block in the target is not genuine busy, so it does not block a source event.
     declined = event("declined block", start, participation=Participation.DECLINED)
-    exclusions = rules(Config(), (declined,), TARGET)
+    exclusions = rules(Config(statuses=frozenset({Participation.ACCEPTED, Participation.UNKNOWN})), (declined,), TARGET)
     assert not excluded(event("Standup", start), exclusions)
 
 
