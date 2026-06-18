@@ -3,12 +3,12 @@
 import logging
 import re
 import sys
-from argparse import Action, ArgumentParser, BooleanOptionalAction, Namespace
-from collections.abc import Sequence
+from argparse import Action, ArgumentDefaultsHelpFormatter, ArgumentParser, BooleanOptionalAction, Namespace
+from collections.abc import Iterable, Sequence
 from dataclasses import fields
 from typing import Any, cast
 
-from calque.config import DEFAULT_EXCLUDES, Config
+from calque.config import Config
 from calque.errors import CalqueError
 from calque.model import Participation
 from calque.service import install, uninstall
@@ -62,11 +62,26 @@ class CollectSet(Action):
         setattr(namespace, self.dest, frozenset(cast("Sequence[str]", values)))
 
 
+def values_string(items: Iterable[Any]) -> str:
+    """Return a list of the string values of a group of items."""
+    return ", ".join(sorted(item.value for item in items))
+
+
+class DefaultsHelpFormatter(ArgumentDefaultsHelpFormatter):
+    """Append each option's default to its help unless the help already mentions it."""
+
+    def _get_help_string(self, action: Action) -> str | None:
+        """Return the help string for an action, appending the default if not already mentioned."""
+        return action.help if action.help and "default: " in action.help else super()._get_help_string(action)
+
+
 def parse_arguments(arguments: list[str] | None) -> Namespace:
     """Build the parser and parse the given command-line arguments."""
+    defaults = Config()
     parser = ArgumentParser(
         prog="calque",
         description="Mirror accepted events from one local calendar into another as anonymised busy blocks.",
+        formatter_class=DefaultsHelpFormatter,
     )
     parser.add_argument(
         "--list-calendars",
@@ -75,14 +90,14 @@ def parse_arguments(arguments: list[str] | None) -> Namespace:
     )
     parser.add_argument(
         "--title",
-        default="Busy ({account} calendar)",
+        default=defaults.title,
         help="title template used for every mirror block",
     )
     parser.add_argument(
         "--title-to",
         nargs=2,
         action=CollectMapping,
-        default={},
+        default=defaults.title_to,
         metavar=("ACCOUNT", "TEMPLATE"),
         help="title template to use when writing into ACCOUNT's calendar, overriding --title; repeatable",
     )
@@ -90,24 +105,34 @@ def parse_arguments(arguments: list[str] | None) -> Namespace:
         "--title-from",
         nargs=2,
         action=CollectMapping,
-        default={},
+        default=defaults.title_from,
         metavar=("ACCOUNT", "TEMPLATE"),
         help="title template for events read from ACCOUNT's calendar, overriding both --title and --title-to; repeatable",
     )
     parser.add_argument(
         "--lookback",
         type=int,
-        default=1,
+        default=defaults.lookback,
         help="days before now to mirror; with --cleanup, the window within which finished events are removed",
     )
-    parser.add_argument("--lookahead", type=int, default=60, help="days after now to mirror")
+    parser.add_argument(
+        "--lookahead",
+        type=int,
+        default=defaults.lookahead,
+        help="days after now to mirror events",
+    )
     parser.add_argument(
         "--cleanup",
         action=BooleanOptionalAction,
-        default=False,
+        default=defaults.cleanup,
         help="remove mirror blocks once their event is over, instead of keeping them through the lookback window",
     )
-    parser.add_argument("--dry-run", action="store_true", help="report the plan without writing anything")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=defaults.dry_run,
+        help="report the plan without writing anything",
+    )
     parser.add_argument(
         "--install",
         type=int,
@@ -121,39 +146,38 @@ def parse_arguments(arguments: list[str] | None) -> Namespace:
         dest="exclude_patterns",
         nargs="+",
         action=CompilePatterns,
-        default=tuple(re.compile(pattern) for pattern in DEFAULT_EXCLUDES),
+        default=defaults.exclude_patterns,
         metavar="REGEX",
-        help="Exclude calendar events with titles that match any of these patterns",
+        help="exclude calendar events with titles that match any of these patterns",
     )
     parser.add_argument(
         "--statuses",
         nargs="+",
         type=Participation,
         action=CollectSet,
-        default=frozenset({Participation.ACCEPTED, Participation.UNKNOWN}),
+        default=defaults.statuses,
         metavar="STATUS",
         help=(
-            "participation responses that count as busy and get mirrored, from "
-            f"{{{', '.join(status.value for status in Participation)}}} "
-            "(default: accepted, unknown)"
+            f"participation responses that count as busy and get mirrored, from {{{values_string(Participation)}}} "
+            f"(default: {values_string(defaults.statuses)})"
         ),
     )
     parser.add_argument(
         "--exclude-clashes",
         action=BooleanOptionalAction,
-        default=True,
+        default=defaults.exclude_clashes,
         help="skip a source event when the target is already busy over any part of its slot",
     )
     parser.add_argument(
         "--exclude-all-day",
         action=BooleanOptionalAction,
-        default=True,
+        default=defaults.exclude_all_day,
         help="skip all-day events",
     )
     parser.add_argument(
         "--exclude-out-of-hours",
         action=BooleanOptionalAction,
-        default=True,
+        default=defaults.exclude_out_of_hours,
         help="skip events that fall entirely outside working hours (Mon-Fri 08:00-18:00)",
     )
     parser.add_argument(
@@ -161,9 +185,9 @@ def parse_arguments(arguments: list[str] | None) -> Namespace:
         dest="muted",
         nargs="+",
         action=CollectSet,
-        default=frozenset(),
+        default=defaults.muted,
         metavar="CALENDAR",
-        help="calendar names that should not be mirrored to; their viewers won't see the mirrored busy blocks",
+        help="calendar names that should not be mirrored to; their viewers won't see the mirrored busy blocks (default: None)",
     )
     parser.add_argument(
         "calendars",
