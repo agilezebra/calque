@@ -8,6 +8,7 @@ import pytest
 from calque import cli
 from calque.config import Config
 from calque.errors import CalendarError, ServiceError
+from calque.model import Participation
 
 
 def test_parse_arguments_collects_the_calendars_in_order() -> None:
@@ -65,6 +66,28 @@ def test_parse_arguments_defaults_muted_to_empty() -> None:
     assert cli.parse_arguments(["Personal", "Work"]).muted == frozenset()
 
 
+def test_parse_arguments_defaults_statuses_to_accepted_and_unknown() -> None:
+    assert cli.parse_arguments(["Personal", "Work"]).statuses == frozenset(
+        {Participation.ACCEPTED, Participation.UNKNOWN},
+    )
+
+
+def test_parse_arguments_collects_statuses_into_participation_members() -> None:
+    # The variadic --statuses must follow the positionals, or it swallows them.
+    parsed = cli.parse_arguments(["Personal", "Work", "--statuses", "accepted", "tentative"])
+    assert parsed.statuses == frozenset({Participation.ACCEPTED, Participation.TENTATIVE})
+
+
+def test_parse_arguments_rejects_an_unknown_status() -> None:
+    with pytest.raises(SystemExit):
+        cli.parse_arguments(["Personal", "Work", "--statuses", "maybe"])
+
+
+def test_to_config_projects_statuses() -> None:
+    config = cli.to_config(cli.parse_arguments(["Personal", "Work", "--statuses", "declined"]))
+    assert config.statuses == frozenset({Participation.DECLINED})
+
+
 def test_to_config_projects_shared_options_and_keeps_defaults_for_the_rest() -> None:
     options = cli.parse_arguments(
         [
@@ -85,7 +108,7 @@ def test_to_config_projects_shared_options_and_keeps_defaults_for_the_rest() -> 
     assert config.title_to == {"Work": "{title}"}
     assert config.lookback == 3
     assert config.exclude_all_day is False
-    assert config.statuses == Config().statuses  # a field with no CLI option falls back to its default
+    assert config.work_start == Config().work_start  # a field with no CLI option falls back to its default
 
 
 def test_main_lists_calendars_and_exits(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:

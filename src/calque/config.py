@@ -40,12 +40,14 @@ class Config:
     :param dry_run: Whether to report the plan without writing any changes.
     """
 
-    title: str = "Busy"
+    title: str = "Busy ({account} calendar)"
     title_to: dict[str, str] = field(default_factory=dict)
     title_from: dict[str, str] = field(default_factory=dict)
     lookback: int = 1
     lookahead: int = 60
-    statuses: frozenset[Participation] = field(default_factory=lambda: frozenset({Participation.ACCEPTED}))
+    statuses: frozenset[Participation] = field(
+        default_factory=lambda: frozenset({Participation.ACCEPTED, Participation.UNKNOWN}),
+    )
     exclude_patterns: tuple[re.Pattern[str], ...] = field(
         default_factory=lambda: tuple(re.compile(pattern) for pattern in DEFAULT_EXCLUDES),
     )
