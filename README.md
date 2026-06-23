@@ -25,11 +25,11 @@ By design, this is **not** a cloud service. Because calendars are already subscr
 > # subject in your own work diary while the client sees only opaque busy blocks.
 > # Replace Work.Calendar and Client.Calendar with your names from --list-calendars.
 > calque Work.Calendar Client.Calendar \
->   --title-to "Work.Calendar" "{account}: {title}" --dry-run      # preview the plan
+>   --title-to Work.Calendar "{account}: {title}" --dry-run      # preview the plan
 > calque Work.Calendar Client.Calendar \
->   --title-to "Work.Calendar" "{account}: {title}"                # apply it once
+>   --title-to Work.Calendar "{account}: {title}"                # apply it once
 > calque Work.Calendar Client.Calendar \
->   --title-to "Work.Calendar" "{account}: {title}" --install 120  # then every 120s
+>   --title-to Work.Calendar "{account}: {title}" --install 120  # then every 120s
 > ```
 
 ## What it does
