@@ -79,7 +79,7 @@ class Event:
 
     def __str__(self) -> str:
         """A human-readable representation of the event for logging and diagnostics."""
-        return f"title={self.title!r} window={self.window} status={self.status.value} participation={self.participation.value}"
+        return f"title={self.title!r} window={self.window} account={self.account!r} status={self.status.value} participation={self.participation.value} identifier={self.identifier!r} notes={self.notes!r}"
 
 
 @dataclass(frozen=True, slots=True)

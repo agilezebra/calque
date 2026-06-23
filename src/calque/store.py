@@ -80,15 +80,12 @@ def to_status(status: int) -> Status:
 
 
 def response(item: Any) -> Participation:
-    """Determine the current user's response to an event from its attendee list."""
-    attendees = item.attendees()
-    if not attendees:
-        # No attendee list means a self-authored block: implicitly accepted.
-        return Participation.ACCEPTED
-    for attendee in attendees:
-        if attendee.isCurrentUser():
-            return to_participation(attendee.participantStatus())
-    return Participation.UNKNOWN
+    """Determine the current user's response to an event from their own attendee record."""
+    attendee = item.selfAttendee()
+    if attendee is not None:
+        participation = to_participation(attendee.participantStatus())
+        return Participation.PENDING if participation is Participation.UNKNOWN else participation
+    return Participation.UNKNOWN if item.hasAttendees() else Participation.ACCEPTED
 
 
 def qualify(calendar: Any) -> str:

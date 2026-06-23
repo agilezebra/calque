@@ -33,16 +33,17 @@ def stub_event(window: Window, **fields: object) -> Mock:
     item.endDate.return_value = store.to_nsdate(window.end)
     item.eventIdentifier.return_value = fields.get("identifier", "event-1")
     item.title.return_value = fields.get("title", "Meeting")
-    item.attendees.return_value = fields.get("attendees")
+    item.selfAttendee.return_value = fields.get("self_attendee")
+    item.hasAttendees.return_value = fields.get("has_attendees", False)
     item.isAllDay.return_value = fields.get("all_day", False)
     item.status.return_value = fields.get("status", EventKit.EKEventStatusConfirmed)
     item.notes.return_value = fields.get("notes")
     return item
 
 
-def attendee(*, current: bool, status: int = EventKit.EKParticipantStatusAccepted) -> Mock:
-    """A mock attendee reporting whether it is the current user and its participation status."""
-    return Mock(**{"isCurrentUser.return_value": current, "participantStatus.return_value": status})
+def self_attendee(status: int = EventKit.EKParticipantStatusAccepted) -> Mock:
+    """A mock self-attendee record exposing the current user's participant status."""
+    return Mock(**{"participantStatus.return_value": status})
 
 
 def detached_store(native: object) -> store.CalendarStore:
@@ -104,17 +105,41 @@ def test_to_participation_maps_each_status(status: int, expected: Participation)
     assert store.to_participation(status) == expected
 
 
-def test_response_treats_an_empty_attendee_list_as_accepted(start: datetime) -> None:
-    assert store.response(stub_event(window(start), attendees=None)) == Participation.ACCEPTED
+def test_response_treats_a_self_authored_event_as_accepted(start: datetime) -> None:
+    # No self-attendee record and no attendees at all: a block we authored ourselves.
+    assert store.response(stub_event(window(start), has_attendees=False)) == Participation.ACCEPTED
 
 
-def test_response_reads_the_current_users_status(start: datetime) -> None:
-    item = stub_event(window(start), attendees=[attendee(current=False), attendee(current=True)])
+def test_response_reads_the_current_users_status_from_the_self_attendee(start: datetime) -> None:
+    item = stub_event(window(start), has_attendees=True, self_attendee=self_attendee())
     assert store.response(item) == Participation.ACCEPTED
 
 
-def test_response_is_unknown_when_the_user_is_not_an_attendee(start: datetime) -> None:
-    assert store.response(stub_event(window(start), attendees=[attendee(current=False)])) == Participation.UNKNOWN
+def test_response_maps_an_unanswered_invitation_to_pending(start: datetime) -> None:
+    # Exchange reports a not-yet-answered invitation as the Unknown participant status on our own record.
+    item = stub_event(
+        window(start), has_attendees=True, self_attendee=self_attendee(EventKit.EKParticipantStatusUnknown)
+    )
+    assert store.response(item) == Participation.PENDING
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (EventKit.EKParticipantStatusTentative, Participation.TENTATIVE),
+        (EventKit.EKParticipantStatusDeclined, Participation.DECLINED),
+    ],
+)
+def test_response_carries_a_definite_self_attendee_status(
+    start: datetime, status: int, expected: Participation
+) -> None:
+    item = stub_event(window(start), has_attendees=True, self_attendee=self_attendee(status))
+    assert store.response(item) == expected
+
+
+def test_response_is_unknown_when_invited_without_a_self_record(start: datetime) -> None:
+    # Attendees exist but EventKit exposes no record for us: genuinely indeterminate, not implicitly accepted.
+    assert store.response(stub_event(window(start), has_attendees=True)) == Participation.UNKNOWN
 
 
 def fake_eventkit(monkeypatch: pytest.MonkeyPatch, **attributes: object) -> None:

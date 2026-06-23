@@ -69,7 +69,10 @@ def test_event_exposes_window_bounds_and_renders(start: datetime) -> None:
     )
     assert event.start == start
     assert event.end == start + timedelta(hours=1)
-    assert str(event) == "title='Standup' window=Fri 2026-06-05 09:00 to 10:00 status=confirmed participation=accepted"
+    assert str(event) == (
+        "title='Standup' window=Fri 2026-06-05 09:00 to 10:00 account='Client' "
+        "status=confirmed participation=accepted identifier='id' notes=None"
+    )
 
 
 def test_mirror_exposes_window_bounds_and_renders(start: datetime) -> None:
