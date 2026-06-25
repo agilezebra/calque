@@ -36,7 +36,7 @@ By design, this is **not** a cloud service. Because calendars are already subscr
 
 - Reads events from the calendars you specify, in a configurable time window around the current time. The **first** calendar
   you list is the **primary**; the rest are mirrored against it.
-- Mirrors only the events you've **accepted** or that have no response (`unknown`); tentative, declined, and
+- Mirrors only the events you've **accepted** (or that have an unknown response); tentative, declined, and
   pending are skipped by default. The set of statuses that count as busy is configurable with `--statuses`.
 - Drops any event an **exclusion rule** rejects: by title pattern, time, or because the target
   calendar is already busy over that slot (see [Exclusions](#exclusions)).
