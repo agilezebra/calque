@@ -123,8 +123,8 @@ calendar. It mirrors all three into your company calendar, then fans your compan
   diary, show the real source account and subject, so you and your colleagues can see what each block actually is and where you are busy.
 - `--title-from "iCloud.Home" "Busy"`: anything originating from your **personal** calendar is
   labelled just `Busy` wherever it lands, so home detail never leaks — not even into your company
-  diary, which the `--title-to` rule would otherwise make detailed (a source override wins over a
-  target one).
+  diary, which the `--title-to` rule would otherwise make detailed (a source `--title-from` override wins over a
+  target `--title-to` one).
 - Client calendars (`MoSW.Calendar`, `MoM.Calendar`) see only the default opaque `Busy (Acme Consulting calendar)` blocks, so neither sees the other's events, your home detail, or anything beyond the fact that you're busy.
 - `--mute "iCloud.Home"` — read your personal calendar as a source but never write blocks into it;
   it stays untouched.
