@@ -41,7 +41,7 @@ By design, this is **not** a cloud service. Because calendars are already subscr
 - Drops any event an **exclusion rule** rejects: by title pattern, time, or because the target
   calendar is already busy over that slot (see [Exclusions](#exclusions)).
 - Writes one block per mirrored event with a **templated title**
-  (default `Busy ({account} calendar)`); no attendees, no joining into, , no location, no notes beyond a hidden opaque marker.
+  (default `Busy ({account} calendar)`); no attendees, no joining info, no location, no notes beyond a hidden opaque marker.
 - **Collects then fans out**: each calendar's events are mirrored into the primary, so the primary
   acts as a hub and holds the full picture, and the primary is then mirrored back out to each of the others, so time
   you've committed with one client shows as busy (anonymized) to the rest. Pass `--mute <CALENDAR>` to
