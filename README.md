@@ -10,6 +10,7 @@ Built for the case where your availability has to show up on calendars in differ
 By design, this is **not** a cloud service. Because calendars are already subscribed in macOS, calque talks only to the local EventKit store. There is **no authentication** required against any of the calendar providers, and no use of their APIs. This makes it suitable for use with **government clients** and other sensitive tenants that **forbid third-party tool** access.
 
 > [!TIP]
+>
 > ## TL;DR
 >
 > Get running on macOS in a few commands (see [Getting started](#getting-started) for the detail):
@@ -146,7 +147,7 @@ This will show up as `python3.x` this time, instead of terminal.
 You will also get a notification of Managed Login Items Added to indicate that the agent has been installed; this will show as `calque` in System Settings → General → Login Items.
 
 ```sh
-calque "Acme Consulting.Acme Consulting" "MoSW.Calendar" "MoM.Calendar" iCloud.Home \
+calque "Acme Consulting.Acme Consulting" "MoSW.Calendar" "MoM.Calendar" "iCloud.Home" \
   --title-to "Acme Consulting.Acme Consulting" "{account}: {title}" \
   --title-from "iCloud.Home" "Busy" \
   --mute "iCloud.Home" \
