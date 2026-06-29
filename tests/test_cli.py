@@ -36,8 +36,8 @@ def test_parse_arguments_merges_repeated_title_overrides() -> None:
 
 
 def test_parse_arguments_compiles_exclude_patterns() -> None:
-    # The variadic --exclude-pattern must follow the positionals, or it swallows them.
-    parsed = cli.parse_arguments(["Personal", "Work", "--exclude-pattern", r"^Lunch$"])
+    # The variadic --exclude-patterns must follow the positionals, or it swallows them.
+    parsed = cli.parse_arguments(["Personal", "Work", "--exclude-patterns", r"^Lunch$"])
     assert [pattern.pattern for pattern in parsed.exclude_patterns] == [r"^Lunch$"]
 
 

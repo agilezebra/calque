@@ -142,8 +142,7 @@ def parse_arguments(arguments: list[str] | None) -> Namespace:
     parser.add_argument("--uninstall", action="store_true", help="remove the installed launchd agent and exit")
     parser.add_argument("--logging", default="info", help="set the logging level")
     parser.add_argument(
-        "--exclude-pattern",
-        dest="exclude_patterns",
+        "--exclude-patterns",
         nargs="+",
         action=CompilePatterns,
         default=defaults.exclude_patterns,

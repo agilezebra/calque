@@ -180,7 +180,7 @@ calque --uninstall
   keeping it for the lookback window (default off).
 - **`--statuses STATUS …`** — participation responses that count as busy and get mirrored, from
   `accepted`, `tentative`, `declined`, `pending`, `unknown` (default `accepted unknown`).
-- **`--exclude-pattern REGEX …`** — replace the default title-exclusion patterns (see
+- **`--exclude-patterns REGEX …`** — replace the default title-exclusion patterns (see
   [Exclusions](#exclusions)).
 - **`--exclude-clashes`** / **`--no-exclude-clashes`** — skip a source event that overlaps a genuine
   event already on the target (default on).
@@ -194,7 +194,7 @@ calque --uninstall
 - **`--uninstall`** — remove the installed `launchd` agent and exit.
 - **`--logging LEVEL`** — logging level (default `info`; `debug` shows why each event was kept or
   excluded).
-Be careful not to place variadic options (`--mute`, `--exclude-pattern`, `--statuses`) immediately before the
+Be careful not to place variadic options (`--mute`, `--exclude-patterns`, `--statuses`) immediately before the
 calendar arguments, or they will swallow them.
 
 ## Titles
@@ -244,7 +244,7 @@ Current rules:
 - **Cancelled** — events the organiser has cancelled (EventKit reports them as cancelled, shown
   struck through and greyed in Calendar.app) are never mirrored, so a meeting that's called off
   drops its busy block instead of lingering.
-- **By title** — source events whose title matches any `--exclude-pattern` regular expression
+- **By title** — source events whose title matches any `--exclude-patterns` regular expression
   are skipped, so availability markers don't get mirrored as meetings. The default excludes a
   bare `Working` status block (`^Working$`) and any annual-leave marker (`\bA/L\b`). Pass one
   or more of your own patterns to replace the defaults.
@@ -264,7 +264,7 @@ Example: skip any event whose title is exactly `Working`, contains `A/L` as a wh
 
 ```sh
 calque "Acme Consulting.Acme Consulting" "MoSW.Calendar" \
-  --exclude-pattern "^Working$" "\bA/L\b" "\bLunch " --no-exclude-clashes
+  --exclude-patterns "^Working$" "\bA/L\b" "\bLunch " --no-exclude-clashes
 ```
 
 ## Writing into every calendar
