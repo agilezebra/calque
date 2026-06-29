@@ -27,6 +27,9 @@ class Config:
     :param lookahead: Days after now to mirror.
     :param statuses: The participation responses that count as "busy" and get mirrored.
     :param exclude_patterns: Patterns whose match against a source title drops that event from the mirror.
+    :param calendar_include_patterns: Whitelist patterns keyed by the fully-qualified name of the calendar an event
+        was read from; where a calendar has any, only its events whose title matches one are mirrored and the rest
+        are dropped. A calendar absent from the mapping is unaffected.
     :param exclude_clashes: Whether to drop a source event that overlaps an existing target event.
     :param exclude_all_day: Whether to drop all-day events.
     :param exclude_out_of_hours: Whether to drop events that fall entirely outside working hours.
@@ -51,6 +54,7 @@ class Config:
     exclude_patterns: tuple[re.Pattern[str], ...] = field(
         default_factory=lambda: tuple(re.compile(pattern) for pattern in DEFAULT_EXCLUDES),
     )
+    calendar_include_patterns: dict[str, tuple[re.Pattern[str], ...]] = field(default_factory=dict)
     exclude_clashes: bool = True
     exclude_all_day: bool = True
     exclude_out_of_hours: bool = True

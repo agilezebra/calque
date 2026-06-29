@@ -41,6 +41,60 @@ def test_parse_arguments_compiles_exclude_patterns() -> None:
     assert [pattern.pattern for pattern in parsed.exclude_patterns] == [r"^Lunch$"]
 
 
+def test_parse_arguments_compiles_calendar_include_patterns() -> None:
+    # The variadic --calendar-include-patterns must follow the positionals, or it swallows them.
+    parsed = cli.parse_arguments(["Personal", "Work", "--calendar-include-patterns", "Home.Shared", r"graham busy"])
+    compiled = {
+        name: [pattern.pattern for pattern in patterns] for name, patterns in parsed.calendar_include_patterns.items()
+    }
+    assert compiled == {"Home.Shared": [r"graham busy"]}
+
+
+def test_parse_arguments_collects_several_patterns_for_one_calendar_in_a_single_use() -> None:
+    parsed = cli.parse_arguments(
+        ["Personal", "Work", "--calendar-include-patterns", "Home.Shared", r"graham busy", r"\bGJ\b"],
+    )
+    assert [pattern.pattern for pattern in parsed.calendar_include_patterns["Home.Shared"]] == [
+        r"graham busy",
+        r"\bGJ\b",
+    ]
+
+
+def test_parse_arguments_accumulates_repeated_include_patterns_per_calendar() -> None:
+    parsed = cli.parse_arguments(
+        [
+            "Personal",
+            "Work",
+            "--calendar-include-patterns",
+            "Home.Shared",
+            r"graham busy",
+            "--calendar-include-patterns",
+            "Home.Shared",
+            r"\bGJ\b",
+        ],
+    )
+    assert [pattern.pattern for pattern in parsed.calendar_include_patterns["Home.Shared"]] == [
+        r"graham busy",
+        r"\bGJ\b",
+    ]
+
+
+def test_parse_arguments_rejects_a_calendar_with_no_include_pattern() -> None:
+    with pytest.raises(SystemExit):
+        cli.parse_arguments(["Personal", "Work", "--calendar-include-patterns", "Home.Shared"])
+
+
+def test_parse_arguments_defaults_include_patterns_to_empty() -> None:
+    assert cli.parse_arguments(["Personal", "Work"]).calendar_include_patterns == {}
+
+
+def test_to_config_projects_include_patterns() -> None:
+    config = cli.to_config(
+        cli.parse_arguments(["Personal", "Work", "--calendar-include-patterns", "Home.Shared", r"graham busy"]),
+    )
+    assert [pattern.pattern for pattern in config.calendar_include_patterns["Home.Shared"]] == [r"graham busy"]
+
+
 def test_parse_arguments_reads_boolean_toggles() -> None:
     parsed = cli.parse_arguments(["--no-exclude-clashes", "--dry-run", "Personal", "Work"])
     assert parsed.exclude_clashes is False

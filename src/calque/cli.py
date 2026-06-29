@@ -17,7 +17,7 @@ from calque.sync import synchronise
 
 
 class CompilePatterns(Action):
-    """Compile the given regular expressions and store them as the immutable exclusion-pattern set."""
+    """Compile the given regular expressions and store them as the immutable pattern set."""
 
     def __call__(
         self,
@@ -28,6 +28,28 @@ class CompilePatterns(Action):
     ) -> None:
         """Compile every pattern and store the resulting tuple on the namespace."""
         setattr(namespace, self.dest, tuple(re.compile(pattern) for pattern in cast("Sequence[str]", values)))
+
+
+class KeyedCompilePatterns(Action):
+    """Collect a ``--option KEY REGEX [REGEX ...]`` group into a mapping of key name to its compiled patterns.
+
+    Requires that the destination is defaulted to a mutable mapping. Repeated groups naming the same key
+    accumulate, so a key can be given several patterns across one or more uses of the option.
+    """
+
+    def __call__(
+        self,
+        parser: ArgumentParser,
+        namespace: Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None,
+    ) -> None:
+        """Compile every pattern in the group and append them under their key in the mapping."""
+        key, *patterns = cast("Sequence[str]", values)
+        if not patterns:
+            parser.error(f"argument {option_string}: expected a key name and at least one pattern")
+        mapping = getattr(namespace, self.dest)
+        mapping[key] = (*mapping.get(key, ()), *(re.compile(pattern) for pattern in patterns))
 
 
 class CollectMapping(Action):
@@ -148,6 +170,17 @@ def parse_arguments(arguments: list[str] | None) -> Namespace:
         default=defaults.exclude_patterns,
         metavar="REGEX",
         help="exclude calendar events with titles that match any of these patterns",
+    )
+    parser.add_argument(
+        "--calendar-include-patterns",
+        nargs="+",
+        action=KeyedCompilePatterns,
+        default=defaults.calendar_include_patterns,
+        metavar=("CALENDAR", "REGEX"),
+        help=(
+            "mirror only events from CALENDAR whose title matches one of the given patterns, a per-calendar "
+            "whitelist; repeatable to whitelist several calendars (default: None)"
+        ),
     )
     parser.add_argument(
         "--statuses",

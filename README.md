@@ -112,13 +112,14 @@ against it.
 calque "Acme Consulting.Acme Consulting" "MoSW.Calendar" "MoM.Calendar" "iCloud.Home" \
   --title-to "Acme Consulting.Acme Consulting" "{account}: {title}" \
   --title-from "iCloud.Home" "Busy" \
+  --calendar-include-patterns "iCloud.Home" "\bGraham busy\n" \
   --mute "iCloud.Home" \
   --dry-run
 ```
 
 This is a typical consultant setup. `Acme Consulting.Acme Consulting` is your company calendar (the
 hub), `MoSW.Calendar` and `MoM.Calendar` are two client tenants, and `iCloud.Home` is your personal
-calendar. It mirrors all three into your company calendar, then fans your company calendar's combined availability back out to the two clients:
+calendar you share with your partner. It mirrors all three into your company calendar, then fans your company calendar's combined availability back out to the two clients:
 
 - `--title-to "Acme Consulting.Acme Consulting" "{account}: {title}"`: in your *own* company
   diary, show the real source account and subject, so you and your colleagues can see what each block actually is and where you are busy.
@@ -126,6 +127,11 @@ calendar. It mirrors all three into your company calendar, then fans your compan
   labelled just `Busy` wherever it lands, so home detail never leaks — not even into your company
   diary, which the `--title-to` rule would otherwise make detailed (a source `--title-from` override wins over a
   target `--title-to` one).
+- `--calendar-include-patterns "iCloud.Home" "\bGraham busy\n"`: treat the shared personal calendar as a
+  whitelist-only calendar, so only its events whose title carries the `Graham busy` marker (e.g.
+  `House Viewing (Graham busy)`) are mirrored at all. Day-to-day home entries stay out of your work
+  diary; just the few commitments you've deliberately flagged show as busy. Without this, *every*
+  accepted home event would mirror across.
 - Client calendars (`MoSW.Calendar`, `MoM.Calendar`) see only the default opaque `Busy (Acme Consulting calendar)` blocks, so neither sees the other's events, your home detail, or anything beyond the fact that you're busy.
 - `--mute "iCloud.Home"` — read your personal calendar as a source but never write blocks into it;
   it stays untouched.
@@ -182,6 +188,11 @@ calque --uninstall
   `accepted`, `tentative`, `declined`, `pending`, `unknown` (default `accepted unknown`).
 - **`--exclude-patterns REGEX …`** — replace the default title-exclusion patterns (see
   [Exclusions](#exclusions)).
+- **`--calendar-include-patterns NAME REGEX …`** — whitelist NAME's calendar: mirror **only** its
+  events whose title matches one of the given patterns, dropping every other event from that one
+  calendar. Give several patterns after a calendar to allow several markers, and repeat the option to
+  whitelist several calendars. A calendar with no include pattern is unaffected. See
+  [Exclusions](#exclusions).
 - **`--exclude-clashes`** / **`--no-exclude-clashes`** — skip a source event that overlaps a genuine
   event already on the target (default on).
 - **`--exclude-all-day`** / **`--no-exclude-all-day`** — skip all-day events (default on).
@@ -194,8 +205,8 @@ calque --uninstall
 - **`--uninstall`** — remove the installed `launchd` agent and exit.
 - **`--logging LEVEL`** — logging level (default `info`; `debug` shows why each event was kept or
   excluded).
-Be careful not to place variadic options (`--mute`, `--exclude-patterns`, `--statuses`) immediately before the
-calendar arguments, or they will swallow them.
+Be careful not to place variadic options (`--mute`, `--exclude-patterns`, `--calendar-include-patterns`,
+`--statuses`) immediately before the calendar arguments, or they will swallow them.
 
 ## Titles
 
@@ -259,6 +270,12 @@ Current rules:
   (not one of calque's own mirror blocks) overlapping any part of its slot, so calque never
   stacks a busy block on time you're already committed elsewhere. On by default; turn it off
   with `--no-exclude-clashes`.
+- **Unlisted** — the inverse of *by title*, scoped to a calendar. Where a calendar is given
+  `--calendar-include-patterns`, only its events whose title matches one of those patterns are
+  mirrored and every other event is dropped, turning that calendar into a whitelist. Calendars
+  without an include pattern are unaffected. The whitelist is keyed on the **source** calendar, so
+  it filters that calendar's events as they're read; a target's own genuine events still count as
+  busy for clash detection regardless.
 
 Example: skip any event whose title is exactly `Working`, contains `A/L` as a whole word, or is `Lunch`, and don't skip events that clash with existing events on the target:
 

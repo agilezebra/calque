@@ -40,7 +40,7 @@ def reconcile(desired: Mapping[str, Mirror], existing: Mapping[str, Mirror]) -> 
 
 def mirror(source: Calendar, target: Calendar, config: Config, window: Window) -> None:
     """Run one mirror pass: read the source, reconcile against the target, and apply the plan."""
-    exclusions = rules(config, target.busy(window), target.qualified)
+    exclusions = rules(config, target.busy(window), source.qualified, target.qualified)
     title = config.title_for_calendar(source, target)
     plan = reconcile(
         to_mirrors(included(source.events(window), exclusions), title, source.qualified),

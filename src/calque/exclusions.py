@@ -38,6 +38,23 @@ def by_title(patterns: tuple[re.Pattern[str], ...]) -> Exclusion:
     return rule
 
 
+def unlisted(patterns: tuple[re.Pattern[str], ...]) -> Exclusion:
+    """Build a rule excluding events whose title matches none of the given whitelist patterns.
+
+    The inverse of :func:`by_title`: where a source calendar opts in with include patterns, only events
+    carrying one of the markers are mirrored and every other event is dropped.
+    """
+
+    def rule(event: Event) -> bool:
+        """True when the event's title matches none of the whitelist patterns."""
+        result = not any(pattern.search(event.title) for pattern in patterns)
+        if result:
+            logging.debug("excluding %r as unlisted (no include pattern matched)", event.title)
+        return result
+
+    return rule
+
+
 def by_clash(events: Iterable[Event]) -> Exclusion:
     """Build a rule excluding events that overlap any interval already busy in the target."""
     busy = tuple(event.window for event in events)
@@ -143,8 +160,8 @@ def by_hours(days: Container[int], opening: time, closing: time) -> Exclusion:
     return rule
 
 
-def rules(config: Config, events: Iterable[Event], target: str) -> tuple[Exclusion, ...]:
-    """Return the active exclusion rule chain for mirroring into ``target`` given its busy ``events``.
+def rules(config: Config, events: Iterable[Event], source: str, target: str) -> tuple[Exclusion, ...]:
+    """Return the active exclusion rule chain for mirroring from ``source`` into ``target`` given its busy ``events``.
 
     The full exclusion chain:
     - intrinsic rules:
@@ -155,12 +172,14 @@ def rules(config: Config, events: Iterable[Event], target: str) -> tuple[Exclusi
       - out-of-hours
       - finished events, when cleanup is enabled
     - our own mirror blocks returning to ``target``
+    - events the ``source`` calendar's include patterns don't whitelist, when it has any
     - clash against target busy periods - which itself filters using the intrinsic rules
 
     A mirror block is excluded only when its origin is ``target``, so a block written by a previous sync is never
     returned to its source (which would chain into a mirror of a mirror) yet still propagates to the other
     calendars. Genuinely busy periods are the target events the intrinsic rules don't themselves exclude, so a
-    focus block, all-day, out-of-hours or unaccepted event never blocks a source event.
+    focus block, all-day, out-of-hours or unaccepted event never blocks a source event. The include-pattern
+    whitelist is keyed on ``source`` and applied only to source events, never to the target's busy periods.
     """
 
     def build() -> Iterable[Exclusion]:
@@ -177,6 +196,8 @@ def rules(config: Config, events: Iterable[Event], target: str) -> tuple[Exclusi
 
     intrinsic = tuple(build())
     exclusions = (*intrinsic, by_origin(target))
+    if whitelist := config.calendar_include_patterns.get(source):
+        exclusions = (*exclusions, unlisted(whitelist))
     if not config.exclude_clashes:
         return exclusions
     # The clash rule takes the target events, which we filter to the genuinely busy periods using the intrinsic rules.
