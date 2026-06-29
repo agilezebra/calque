@@ -1,5 +1,6 @@
 """Tests for the reconciliation core, a single mirror pass, and the both-ways synchronisation run."""
 
+import re
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock, call
 
@@ -133,6 +134,24 @@ def test_mirror_deletes_finished_blocks_when_cleanup_enabled() -> None:
     plan = target.apply.call_args.args[0]
     assert [removed.source for removed in plan.delete] == ["over"]
     assert not plan.create
+
+
+def test_mirror_only_writes_whitelisted_events_from_a_source_with_include_patterns(start: datetime) -> None:
+    listed = event("House Viewing (graham busy)", start)
+    unlisted_event = event("Swimming lesson", start)
+    source = Mock(
+        qualified="Home.Shared",
+        **{"events.return_value": [listed, unlisted_event], "busy.return_value": [], "mirrors.return_value": {}},
+    )
+    target = calendar("Work.Office")
+    config = Config(
+        calendar_include_patterns={"Home.Shared": (re.compile(r"graham busy"),)},
+        exclude_clashes=False,
+        exclude_out_of_hours=False,
+    )
+    mirror(source, target, config, Window(start, start + timedelta(days=1)))
+    created = target.apply.call_args.args[0].create
+    assert [block.source for block in created] == ["House Viewing (graham busy)"]
 
 
 def test_synchronise_collects_each_auxiliary_into_the_primary_then_fans_out(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "sonarqube": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "--env-file",
+        ".env",
+        "-e",
+        "SONARQUBE_ORG=agilezebra",
+        "-e",
+        "SONARQUBE_PROJECT_KEY=agilezebra_calque",
+        "sonarsource/sonarqube-mcp"
+      ]
+    }
+  }
+}

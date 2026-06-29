@@ -20,10 +20,12 @@ from calque.exclusions import (
     is_all_day,
     is_cancelled,
     rules,
+    unlisted,
 )
 from calque.model import Event, Participation, Status, Window, tag
 
 WORK_DAYS = frozenset({0, 1, 2, 3, 4})
+SOURCE = "Source.Calendar"
 TARGET = "Target.Calendar"
 
 
@@ -72,6 +74,35 @@ def test_by_title_matches_any_pattern(start: datetime) -> None:
     assert not rule(event("Standup", start))
 
 
+def test_unlisted_excludes_titles_matching_no_pattern(start: datetime) -> None:
+    rule = unlisted((re.compile(r"graham busy"), re.compile(r"\bGJ\b")))
+    assert rule(event("Lunch", start))
+    assert rule(event("Dentist", start))
+    assert not rule(event("House Viewing (graham busy)", start))
+    assert not rule(event("School run GJ", start))
+
+
+def test_rules_whitelists_only_listed_events_from_the_source(start: datetime) -> None:
+    config = Config(calendar_include_patterns={"Home.Shared": (re.compile(r"graham busy"),)}, exclude_clashes=False)
+    exclusions = rules(config, (), "Home.Shared", TARGET)
+    assert excluded(event("Swimming lesson", start), exclusions)
+    assert not excluded(event("House Viewing (graham busy)", start), exclusions)
+
+
+def test_rules_leaves_a_source_without_include_patterns_unfiltered(start: datetime) -> None:
+    config = Config(calendar_include_patterns={"Home.Shared": (re.compile(r"graham busy"),)}, exclude_clashes=False)
+    exclusions = rules(config, (), "Work.Office", TARGET)
+    assert not excluded(event("Swimming lesson", start), exclusions)
+
+
+def test_rules_whitelist_does_not_filter_target_busy_periods(start: datetime) -> None:
+    # The whitelist is keyed on the source, so a target busy period that the source would not list
+    # still counts as busy and blocks an overlapping listed source event from being mirrored in.
+    config = Config(calendar_include_patterns={"Home.Shared": (re.compile(r"graham busy"),)})
+    exclusions = rules(config, (event("Team meeting", start),), "Home.Shared", TARGET)
+    assert excluded(event("Viewing (graham busy)", start), exclusions)
+
+
 def test_by_clash_excludes_any_overlap(start: datetime) -> None:
     rule = by_clash((event("busy", start),))
     assert rule(event("exact", start))
@@ -88,17 +119,17 @@ def test_by_clash_allows_adjacent_and_free(start: datetime) -> None:
 
 
 def test_chain_adds_clash_rule_when_enabled(start: datetime) -> None:
-    exclusions = rules(Config(exclude_patterns=(), exclude_clashes=True), (event("meeting", start),), TARGET)
+    exclusions = rules(Config(exclude_patterns=(), exclude_clashes=True), (event("meeting", start),), SOURCE, TARGET)
     assert excluded(event("meeting", start), exclusions)
 
 
 def test_chain_omits_clash_rule_when_disabled(start: datetime) -> None:
-    exclusions = rules(Config(exclude_patterns=(), exclude_clashes=False), (event("meeting", start),), TARGET)
+    exclusions = rules(Config(exclude_patterns=(), exclude_clashes=False), (event("meeting", start),), SOURCE, TARGET)
     assert not excluded(event("meeting", start), exclusions)
 
 
 def test_chain_always_applies_title_rules(start: datetime) -> None:
-    exclusions = rules(Config(exclude_clashes=False), (), TARGET)
+    exclusions = rules(Config(exclude_clashes=False), (), SOURCE, TARGET)
     assert excluded(event("Working", start), exclusions)
     assert not excluded(event("Standup", start), exclusions)
 
@@ -106,7 +137,7 @@ def test_chain_always_applies_title_rules(start: datetime) -> None:
 def test_rules_ignores_busy_periods_that_are_themselves_excluded(start: datetime) -> None:
     # A "Working" focus block in the target matches the title patterns, so it is not treated as
     # busy and does not block an overlapping source event from being mirrored in.
-    exclusions = rules(Config(), (event("Working", start),), TARGET)
+    exclusions = rules(Config(), (event("Working", start),), SOURCE, TARGET)
     assert not excluded(event("Standup", start), exclusions)
 
 
@@ -115,7 +146,7 @@ def test_excluded_is_false_for_empty_chain(start: datetime) -> None:
 
 
 def test_included_keeps_only_events_no_rule_rejects(start: datetime) -> None:
-    exclusions = rules(Config(exclude_clashes=False), (), TARGET)
+    exclusions = rules(Config(exclude_clashes=False), (), SOURCE, TARGET)
     events = [event("Working", start), event("Sprint planning", start)]
     assert [kept.title for kept in included(events, exclusions)] == ["Sprint planning"]
 
@@ -147,7 +178,7 @@ def test_is_cancelled_excludes_only_cancelled_events(start: datetime) -> None:
 
 
 def test_rules_excludes_cancelled_source_events(start: datetime) -> None:
-    exclusions = rules(Config(exclude_clashes=False), (), TARGET)
+    exclusions = rules(Config(exclude_clashes=False), (), SOURCE, TARGET)
     assert excluded(event("Canceled: Standup", start, status=Status.CANCELLED), exclusions)
     assert not excluded(event("Standup", start, status=Status.CONFIRMED), exclusions)
 
@@ -155,7 +186,7 @@ def test_rules_excludes_cancelled_source_events(start: datetime) -> None:
 def test_rules_ignores_cancelled_busy_periods(start: datetime) -> None:
     # A cancelled event in the target is not genuine busy, so it does not block a source event.
     cancelled = event("Canceled: Workshop", start, status=Status.CANCELLED)
-    exclusions = rules(Config(), (cancelled,), TARGET)
+    exclusions = rules(Config(), (cancelled,), SOURCE, TARGET)
     assert not excluded(event("Standup", start), exclusions)
 
 
@@ -170,14 +201,14 @@ def test_by_passed_excludes_only_finished_events() -> None:
 
 def test_rules_drops_finished_events_when_cleanup_enabled() -> None:
     now = datetime.now(UTC)
-    exclusions = rules(Config(cleanup=True, exclude_clashes=False, exclude_out_of_hours=False), (), TARGET)
+    exclusions = rules(Config(cleanup=True, exclude_clashes=False, exclude_out_of_hours=False), (), SOURCE, TARGET)
     assert excluded(event("over", now - timedelta(hours=2)), exclusions)
     assert not excluded(event("ahead", now + timedelta(hours=2)), exclusions)
 
 
 def test_rules_keeps_finished_events_without_cleanup() -> None:
     now = datetime.now(UTC)
-    exclusions = rules(Config(exclude_clashes=False, exclude_out_of_hours=False), (), TARGET)
+    exclusions = rules(Config(exclude_clashes=False, exclude_out_of_hours=False), (), SOURCE, TARGET)
     assert not excluded(event("over", now - timedelta(hours=2)), exclusions)
 
 
@@ -191,7 +222,7 @@ def test_by_origin_excludes_only_mirrors_returning_to_the_target(start: datetime
 
 def test_rules_excludes_a_mirror_only_when_it_would_return_to_its_origin(start: datetime) -> None:
     # A block this sync wrote into ClientA from ClientA must never be mirrored back (a mirror of a mirror)...
-    exclusions = rules(Config(exclude_clashes=False), (), "ClientA.Calendar")
+    exclusions = rules(Config(exclude_clashes=False), (), SOURCE, "ClientA.Calendar")
     assert excluded(event("ClientA: Follow Up", start, notes=tag("ClientA.Calendar", "id")), exclusions)
     # ...but a block sourced from another client still propagates onward to ClientA.
     assert not excluded(event("ClientB busy", start, notes=tag("ClientB.Calendar", "id")), exclusions)
@@ -209,7 +240,7 @@ def test_by_participation_excludes_unmirrored_statuses(start: datetime) -> None:
 
 
 def test_rules_excludes_source_events_by_participation(start: datetime) -> None:
-    exclusions = rules(Config(statuses=frozenset({Participation.ACCEPTED, Participation.UNKNOWN})), (), TARGET)
+    exclusions = rules(Config(statuses=frozenset({Participation.ACCEPTED, Participation.UNKNOWN})), (), SOURCE, TARGET)
     assert excluded(event("tentative", start, participation=Participation.TENTATIVE), exclusions)
     assert not excluded(event("accepted", start), exclusions)
     assert not excluded(event("unknown", start, participation=Participation.UNKNOWN), exclusions)
@@ -218,18 +249,21 @@ def test_rules_excludes_source_events_by_participation(start: datetime) -> None:
 def test_rules_ignores_busy_periods_with_unmirrored_participation(start: datetime) -> None:
     # A declined block in the target is not genuine busy, so it does not block a source event.
     declined = event("declined block", start, participation=Participation.DECLINED)
-    exclusions = rules(Config(statuses=frozenset({Participation.ACCEPTED, Participation.UNKNOWN})), (declined,), TARGET)
+    exclusions = rules(
+        Config(statuses=frozenset({Participation.ACCEPTED, Participation.UNKNOWN})), (declined,), SOURCE, TARGET
+    )
     assert not excluded(event("Standup", start), exclusions)
 
 
 def test_rules_gates_all_day_and_out_of_hours(start: datetime) -> None:
-    enabled = rules(Config(exclude_patterns=(), exclude_clashes=False), (), TARGET)
+    enabled = rules(Config(exclude_patterns=(), exclude_clashes=False), (), SOURCE, TARGET)
     assert excluded(event("holiday", start, all_day=True), enabled)
     assert excluded(event("weekend", datetime(2026, 6, 6, 9, 0, tzinfo=UTC)), enabled)
 
     disabled = rules(
         Config(exclude_patterns=(), exclude_clashes=False, exclude_all_day=False, exclude_out_of_hours=False),
         (),
+        SOURCE,
         TARGET,
     )
     assert not excluded(event("weekend holiday", datetime(2026, 6, 6, 9, 0, tzinfo=UTC), all_day=True), disabled)
