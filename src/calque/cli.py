@@ -30,7 +30,7 @@ class CompilePatterns(Action):
         setattr(namespace, self.dest, tuple(re.compile(pattern) for pattern in cast("Sequence[str]", values)))
 
 
-class KeyedCompilePatterns(Action):
+class CollectCompilePatterns(Action):
     """Collect a ``--option KEY REGEX [REGEX ...]`` group into a mapping of key name to its compiled patterns.
 
     Requires that the destination is defaulted to a mutable mapping. Repeated groups naming the same key
@@ -44,7 +44,7 @@ class KeyedCompilePatterns(Action):
         values: str | Sequence[Any] | None,
         option_string: str | None = None,
     ) -> None:
-        """Compile every pattern in the group and append them under their key in the mapping."""
+        """Compile every pattern and append them under their key in the mapping."""
         key, *patterns = cast("Sequence[str]", values)
         if not patterns:
             parser.error(f"argument {option_string}: expected a key name and at least one pattern")
@@ -55,7 +55,7 @@ class KeyedCompilePatterns(Action):
 class CollectMapping(Action):
     """Collect one or more ``--option-for KEY VALUE`` pairs into a mapping.
 
-    Requires that the destination field is defaulted to a mutable mapping type, which it updates in-place with each pair.
+    Requires that the destination is defaulted to a mutable mapping, which it updates in-place with each pair.
     """
 
     def __call__(
@@ -174,7 +174,7 @@ def parse_arguments(arguments: list[str] | None) -> Namespace:
     parser.add_argument(
         "--calendar-include-patterns",
         nargs="+",
-        action=KeyedCompilePatterns,
+        action=CollectCompilePatterns,
         default=defaults.calendar_include_patterns,
         metavar=("CALENDAR", "REGEX"),
         help=(
