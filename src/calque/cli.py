@@ -21,13 +21,13 @@ class CompilePatterns(Action):
 
     def __call__(
         self,
-        parser: ArgumentParser,  # noqa: ARG002
+        parser: ArgumentParser,
         namespace: Namespace,
         values: str | Sequence[Any] | None,
         option_string: str | None = None,
     ) -> None:
         """Compile every pattern and store the resulting tuple on the namespace."""
-        patterns = cast("Sequence[str]", values)  # NOSONAR: type string for cast, not a constant
+        patterns = cast("Sequence[str]", values)  # NOSONAR(S1192)
         setattr(namespace, self.dest, tuple(re.compile(pattern) for pattern in patterns))
 
 
@@ -61,7 +61,7 @@ class CollectMapping(Action):
 
     def __call__(
         self,
-        parser: ArgumentParser,  # noqa: ARG002
+        parser: ArgumentParser,
         namespace: Namespace,
         values: str | Sequence[Any] | None,
         option_string: str | None = None,
@@ -76,7 +76,7 @@ class CollectSet(Action):
 
     def __call__(
         self,
-        parser: ArgumentParser,  # noqa: ARG002
+        parser: ArgumentParser,
         namespace: Namespace,
         values: str | Sequence[Any] | None,
         option_string: str | None = None,
@@ -262,7 +262,8 @@ def main(arguments: list[str] | None = None) -> int:
         else:
             synchronise(to_config(options), options.calendars)
     except CalqueError as exception:
-        logging.error("calque failed: %s", exception)  # NOSONAR: expected failure, no traceback wanted
+        # An expected, user-facing failure: a traceback would be noise.
+        logging.error("calque failed: %s", exception)  # NOSONAR(S8572)
         return 1
     return 0
 

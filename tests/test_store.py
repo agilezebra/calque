@@ -11,7 +11,6 @@ from unittest.mock import Mock
 
 import EventKit
 import pytest
-
 from calque import store
 from calque.errors import AccessError, CalendarError, WriteError
 from calque.model import Mirror, Participation, Plan, Status, Tag, Window, tag
@@ -166,7 +165,7 @@ def test_request_access_returns_when_the_user_grants_access(monkeypatch: pytest.
         EKAuthorizationStatusFullAccess=3,
         EKEventStore=types.SimpleNamespace(authorizationStatusForEntityType_=lambda _entity: 0),
     )
-    native = Mock(requestFullAccessToEventsWithCompletion_=lambda handler: handler(True, None))  # noqa: FBT003
+    native = Mock(requestFullAccessToEventsWithCompletion_=lambda handler: handler(True, None))
     store.request_access(native)
 
 
@@ -177,7 +176,7 @@ def test_request_access_raises_when_the_user_denies(monkeypatch: pytest.MonkeyPa
         EKAuthorizationStatusFullAccess=3,
         EKEventStore=types.SimpleNamespace(authorizationStatusForEntityType_=lambda _entity: 0),
     )
-    native = Mock(requestFullAccessToEventsWithCompletion_=lambda handler: handler(False, "refused"))  # noqa: FBT003
+    native = Mock(requestFullAccessToEventsWithCompletion_=lambda handler: handler(False, "refused"))
     with pytest.raises(AccessError):
         store.request_access(native)
 
@@ -272,10 +271,11 @@ def test_save_persists_a_successful_write() -> None:
 
 def test_save_raises_when_the_write_fails() -> None:
     native = Mock()
+    event = Mock()
     native.saveEvent_span_error_.return_value = (False, "rejected")
     store = detached_store(native)
     with pytest.raises(WriteError):
-        store.save(Mock())
+        store.save(event)
 
 
 def test_remove_deletes_a_successful_block() -> None:
@@ -287,10 +287,11 @@ def test_remove_deletes_a_successful_block() -> None:
 
 def test_remove_raises_when_the_delete_fails() -> None:
     native = Mock()
+    event = Mock()
     native.removeEvent_span_error_.return_value = (False, "rejected")
     store = detached_store(native)
     with pytest.raises(WriteError):
-        store.remove(Mock())
+        store.remove(event)
 
 
 def calendar_with(native_store: Mock, account: str = "Client") -> store.Calendar:
