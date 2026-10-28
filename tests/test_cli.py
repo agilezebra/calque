@@ -7,7 +7,7 @@ import pytest
 
 from calque import cli
 from calque.config import Config
-from calque.errors import CalendarError, ServiceError
+from calque.errors import CalendarError, DeleteLimitError, ServiceError
 from calque.model import Participation
 
 
@@ -110,6 +110,33 @@ def test_to_config_projects_cleanup() -> None:
     assert cli.to_config(cli.parse_arguments(["--cleanup", "Personal", "Work"])).cleanup is True
 
 
+def test_parse_arguments_defaults_max_deletes_to_no_limit() -> None:
+    assert cli.parse_arguments(["Personal", "Work"]).max_deletes is None
+
+
+def test_parse_arguments_reads_max_deletes() -> None:
+    assert cli.parse_arguments(["--max-deletes", "5", "Personal", "Work"]).max_deletes == 5
+
+
+def test_parse_arguments_rejects_a_non_integer_max_deletes() -> None:
+    with pytest.raises(SystemExit):
+        cli.parse_arguments(["--max-deletes", "many", "Personal", "Work"])
+
+
+def test_parse_arguments_rejects_a_negative_max_deletes() -> None:
+    with pytest.raises(SystemExit):
+        cli.parse_arguments(["--max-deletes", "-1", "Personal", "Work"])
+
+
+def test_parse_arguments_accepts_a_zero_max_deletes() -> None:
+    assert cli.parse_arguments(["--max-deletes", "0", "Personal", "Work"]).max_deletes == 0
+
+
+def test_to_config_projects_max_deletes() -> None:
+    assert cli.to_config(cli.parse_arguments(["--max-deletes", "5", "Personal", "Work"])).max_deletes == 5
+    assert cli.to_config(cli.parse_arguments(["Personal", "Work"])).max_deletes is None
+
+
 def test_parse_arguments_collects_muted_calendars_into_a_set() -> None:
     # The variadic --mute must follow the positionals, or it swallows them.
     parsed = cli.parse_arguments(["Personal", "Work", "Side", "--mute", "Work", "Side"])
@@ -196,6 +223,11 @@ def test_main_forwards_muted_calendars_to_the_run(monkeypatch: pytest.MonkeyPatc
 def test_main_reports_a_sync_error_with_a_nonzero_code(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli, "synchronise", Mock(side_effect=CalendarError("Work")))
     assert cli.main(["Personal", "Work"]) == 1
+
+
+def test_main_reports_a_delete_limit_error_with_a_nonzero_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "synchronise", Mock(side_effect=DeleteLimitError(5)))
+    assert cli.main(["--max-deletes", "5", "Personal", "Work"]) == 1
 
 
 def test_parse_arguments_reads_the_install_interval() -> None:

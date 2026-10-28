@@ -40,6 +40,8 @@ class Config:
         mirrored busy blocks; the calendar is still read as a source and mirrored into the others.
     :param cleanup: Whether to remove a mirror block once its event is over (end time has passed),
         rather than keeping it for the ``lookback`` window.
+    :param max_deletes: The most mirror blocks a single pass may delete; a pass that would delete more is skipped
+        whole. ``None`` means no limit.
     :param dry_run: Whether to report the plan without writing any changes.
     """
 
@@ -63,6 +65,7 @@ class Config:
     work_end: time = time(18)
     muted: frozenset[str] = frozenset()
     cleanup: bool = False
+    max_deletes: int | None = None
     dry_run: bool = False
 
     def title_for_calendar(self, source: Calendar, target: Calendar) -> str:

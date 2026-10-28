@@ -33,3 +33,7 @@ def test_source_override_wins_over_the_target_override() -> None:
     assert config.title_for_calendar(calendar("iCloud.Home"), calendar("Work.MyCompany")) == "Busy"
     # ...while an event from a client into MyCompany still gets the target's detailed title.
     assert config.title_for_calendar(calendar("Client.Calendar"), calendar("Work.MyCompany")) == "{account}: {title}"
+
+
+def test_max_deletes_defaults_to_no_limit() -> None:
+    assert Config().max_deletes is None

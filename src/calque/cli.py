@@ -3,7 +3,14 @@
 import logging
 import re
 import sys
-from argparse import Action, ArgumentDefaultsHelpFormatter, ArgumentParser, BooleanOptionalAction, Namespace
+from argparse import (
+    Action,
+    ArgumentDefaultsHelpFormatter,
+    ArgumentParser,
+    ArgumentTypeError,
+    BooleanOptionalAction,
+    Namespace,
+)
 from collections.abc import Iterable, Sequence
 from dataclasses import fields
 from typing import Any, cast
@@ -90,6 +97,15 @@ def values_string(items: Iterable[Any]) -> str:
     return ", ".join(sorted(item.value for item in items))
 
 
+def non_negative_int(value: str) -> int:
+    """Parse a whole number of zero or more, rejecting a negative one."""
+    number = int(value)
+    if number < 0:
+        msg = f"must be 0 or more, not {number}"
+        raise ArgumentTypeError(msg)
+    return number
+
+
 class DefaultsHelpFormatter(ArgumentDefaultsHelpFormatter):
     """Append each option's default to its help unless the help already mentions it."""
 
@@ -149,6 +165,13 @@ def parse_arguments(arguments: list[str] | None) -> Namespace:
         action=BooleanOptionalAction,
         default=defaults.cleanup,
         help="remove mirror blocks once their event is over, instead of keeping them through the lookback window",
+    )
+    parser.add_argument(
+        "--max-deletes",
+        type=non_negative_int,
+        default=defaults.max_deletes,
+        metavar="N",
+        help="skip any mirror pass that would delete more than N blocks, then exit non-zero unless a dry run (default: no limit)",
     )
     parser.add_argument(
         "--dry-run",

@@ -26,6 +26,16 @@ class WriteError(CalqueError):
         super().__init__(f"EventKit write failed: {detail}")
 
 
+class DeleteLimitError(CalqueError):
+    """One or more mirror passes were skipped for planning more deletes than the limit allows."""
+
+    def __init__(self, limit: int | None) -> None:
+        super().__init__(
+            f"skipped mirror passes that would delete more than {limit} mirror blocks; "
+            "run once without --max-deletes to apply them",
+        )
+
+
 class ServiceError(CalqueError):
     """Installing or removing the launchd agent failed."""
 
