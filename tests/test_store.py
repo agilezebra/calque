@@ -228,8 +228,9 @@ def test_calendar_matches_a_qualified_title() -> None:
 def test_calendar_raises_when_no_title_matches() -> None:
     native = Mock()
     native.calendarsForEntityType_.return_value = [calendar_named("Work", "Office")]
+    store = detached_store(native)
     with pytest.raises(CalendarError):
-        detached_store(native).calendar("Missing")
+        store.calendar("Missing")
 
 
 def test_fetch_yields_events_matching_the_window_predicate(start: datetime) -> None:
@@ -272,8 +273,9 @@ def test_save_persists_a_successful_write() -> None:
 def test_save_raises_when_the_write_fails() -> None:
     native = Mock()
     native.saveEvent_span_error_.return_value = (False, "rejected")
+    store = detached_store(native)
     with pytest.raises(WriteError):
-        detached_store(native).save(Mock())
+        store.save(Mock())
 
 
 def test_remove_deletes_a_successful_block() -> None:
@@ -286,8 +288,9 @@ def test_remove_deletes_a_successful_block() -> None:
 def test_remove_raises_when_the_delete_fails() -> None:
     native = Mock()
     native.removeEvent_span_error_.return_value = (False, "rejected")
+    store = detached_store(native)
     with pytest.raises(WriteError):
-        detached_store(native).remove(Mock())
+        store.remove(Mock())
 
 
 def calendar_with(native_store: Mock, account: str = "Client") -> store.Calendar:

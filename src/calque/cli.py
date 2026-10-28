@@ -27,7 +27,8 @@ class CompilePatterns(Action):
         option_string: str | None = None,
     ) -> None:
         """Compile every pattern and store the resulting tuple on the namespace."""
-        setattr(namespace, self.dest, tuple(re.compile(pattern) for pattern in cast("Sequence[str]", values)))
+        patterns = cast("Sequence[str]", values)  # NOSONAR: type string for cast, not a constant
+        setattr(namespace, self.dest, tuple(re.compile(pattern) for pattern in patterns))
 
 
 class CollectCompilePatterns(Action):
@@ -261,7 +262,7 @@ def main(arguments: list[str] | None = None) -> int:
         else:
             synchronise(to_config(options), options.calendars)
     except CalqueError as exception:
-        logging.error("calque failed: %s", exception)
+        logging.error("calque failed: %s", exception)  # NOSONAR: expected failure, no traceback wanted
         return 1
     return 0
 
