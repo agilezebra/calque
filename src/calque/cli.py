@@ -21,7 +21,7 @@ class CompilePatterns(Action):
 
     def __call__(
         self,
-        parser: ArgumentParser,
+        parser: ArgumentParser,  # noqa: ARG002
         namespace: Namespace,
         values: str | Sequence[Any] | None,
         option_string: str | None = None,
@@ -61,7 +61,7 @@ class CollectMapping(Action):
 
     def __call__(
         self,
-        parser: ArgumentParser,
+        parser: ArgumentParser,  # noqa: ARG002
         namespace: Namespace,
         values: str | Sequence[Any] | None,
         option_string: str | None = None,
@@ -76,7 +76,7 @@ class CollectSet(Action):
 
     def __call__(
         self,
-        parser: ArgumentParser,
+        parser: ArgumentParser,  # noqa: ARG002
         namespace: Namespace,
         values: str | Sequence[Any] | None,
         option_string: str | None = None,

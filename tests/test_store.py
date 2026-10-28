@@ -11,6 +11,7 @@ from unittest.mock import Mock
 
 import EventKit
 import pytest
+
 from calque import store
 from calque.errors import AccessError, CalendarError, WriteError
 from calque.model import Mirror, Participation, Plan, Status, Tag, Window, tag
@@ -165,7 +166,7 @@ def test_request_access_returns_when_the_user_grants_access(monkeypatch: pytest.
         EKAuthorizationStatusFullAccess=3,
         EKEventStore=types.SimpleNamespace(authorizationStatusForEntityType_=lambda _entity: 0),
     )
-    native = Mock(requestFullAccessToEventsWithCompletion_=lambda handler: handler(True, None))
+    native = Mock(requestFullAccessToEventsWithCompletion_=lambda handler: handler(True, None))  # noqa: FBT003
     store.request_access(native)
 
 
@@ -176,7 +177,7 @@ def test_request_access_raises_when_the_user_denies(monkeypatch: pytest.MonkeyPa
         EKAuthorizationStatusFullAccess=3,
         EKEventStore=types.SimpleNamespace(authorizationStatusForEntityType_=lambda _entity: 0),
     )
-    native = Mock(requestFullAccessToEventsWithCompletion_=lambda handler: handler(False, "refused"))
+    native = Mock(requestFullAccessToEventsWithCompletion_=lambda handler: handler(False, "refused"))  # noqa: FBT003
     with pytest.raises(AccessError):
         store.request_access(native)
 
