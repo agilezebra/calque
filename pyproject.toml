@@ -129,8 +129,12 @@ warn_return_any = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.coverage.run]
+branch = true
+
 [tool.coverage.report]
 exclude_also = ["if __name__ == .__main__.:"]
+fail_under = 100
 
 [tool.poe.tasks]
 lint = "ruff check ."
@@ -143,5 +147,5 @@ check = [
     { ref = "lint" },
     { ref = "format" },
     { ref = "types" },
-    { ref = "test" },
+    { ref = "cover" },
 ]

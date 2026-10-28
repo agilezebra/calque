@@ -33,6 +33,23 @@ def test_properties_builds_the_expected_plist_mapping() -> None:
     }
 
 
+def test_properties_sets_the_agent_path_when_given() -> None:
+    plist = properties(
+        ["/bin/calque"], 900, Path("/Users/me/Library/Logs/calque.log"), path="/opt/homebrew/bin:/usr/bin"
+    )
+    assert plist["EnvironmentVariables"] == {"PATH": "/opt/homebrew/bin:/usr/bin"}
+
+
+def test_install_passes_the_installing_shell_path_to_the_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PATH", "/opt/homebrew/bin:/usr/bin:/bin")
+    monkeypatch.setattr(sys, "argv", ["/opt/calque/bin/calque", "--install", "900", "Personal", "Work"])
+    monkeypatch.setattr(service, "launchctl", Mock())
+    install(["--install", "900", "Personal", "Work"], 900)
+
+    loaded = plistlib.loads(location().read_bytes())
+    assert loaded["EnvironmentVariables"] == {"PATH": "/opt/homebrew/bin:/usr/bin:/bin"}
+
+
 def test_location_sits_under_launch_agents(home: Path) -> None:
     assert location("com.example.calque") == home / "Library" / "LaunchAgents" / "com.example.calque.plist"
 
@@ -51,6 +68,23 @@ def test_install_embeds_the_executable_strips_the_flag_then_replaces_and_bootstr
     assert loaded["ProgramArguments"] == [os.path.realpath("/opt/calque/bin/calque"), "Personal", "Work"]
     assert loaded["StartInterval"] == 900
     assert [arguments[0] for arguments in calls] == ["bootout", "bootstrap"]
+
+
+def test_install_keeps_the_failure_alert_options_in_the_program_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
+    arguments = ["--notify-on-failure", "--on-failure", "cmd arg", "--install", "900", "Personal", "Work"]
+    monkeypatch.setattr(sys, "argv", ["/opt/calque/bin/calque", *arguments])
+    monkeypatch.setattr(service, "launchctl", Mock())
+    install(arguments, 900)
+
+    loaded = plistlib.loads(location().read_bytes())
+    assert loaded["ProgramArguments"] == [
+        os.path.realpath("/opt/calque/bin/calque"),
+        "--notify-on-failure",
+        "--on-failure",
+        "cmd arg",
+        "Personal",
+        "Work",
+    ]
 
 
 def test_uninstall_boots_out_and_removes_the_plist(monkeypatch: pytest.MonkeyPatch) -> None:
