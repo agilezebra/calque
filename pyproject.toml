@@ -91,6 +91,14 @@ dummy-variable-rgx = "_+|unused|.*_unused"
     "T201",    # writes results to stdout by design
 ]
 
+"scripts/*" = [
+    "INP001",  # standalone developer scripts, not an importable package
+    "S310",    # URLs are fixed http(s) endpoints, never user input
+    "S603",    # subprocess arguments are built from constants, not user input
+    "S607",    # docker is resolved from PATH like any developer tool
+    "T201",    # reports to the terminal by design
+]
+
 "tests/*" = [
     "S101",    # asserts are the point of a test
     "D103",    # test functions document themselves through their names
@@ -130,6 +138,7 @@ format = "ruff format --check ."
 types = "mypy ."
 test = "pytest"
 cover = "pytest --cov=calque --cov-report=term-missing --cov-report=html"
+sonar = { cmd = "python scripts/sonar.py", help = "Run SonarCloud's Python rules locally (needs Docker)" }
 check = [
     { ref = "lint" },
     { ref = "format" },
