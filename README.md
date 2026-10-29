@@ -48,8 +48,8 @@ By design, this is **not** a cloud service. Because calendars are already subscr
   you've committed with one client shows as busy (anonymized) to the rest. Pass `--mute <CALENDAR>` to
   keep a calendar from *receiving* blocks while still reading it as a source.
 - Re-runs are **idempotent**: each block carries a hidden marker linking it to its source event
-  and origin calendar, so calque updates times that moved, removes blocks whose source disappeared,
-  and never mirrors a block back to the calendar it came from.
+  and origin calendar, so calque updates times that moved, removes blocks whose source disappeared
+  (unless that would exceed `--max-deletes`), and never mirrors a block back to the calendar it came from.
 
 ## Getting started
 
@@ -160,6 +160,8 @@ calque "Acme Consulting.Acme Consulting" "MoSW.Calendar" "MoM.Calendar" "iCloud.
   --install 180          # run every 3 minutes
 ```
 
+The agent writes its output, including any errors, to `~/Library/Logs/calque.log`.
+
 Remove it with:
 
 ```sh
@@ -198,6 +200,13 @@ calque --uninstall
 - **`--exclude-all-day`** / **`--no-exclude-all-day`** — skip all-day events (default on).
 - **`--exclude-out-of-hours`** / **`--no-exclude-out-of-hours`** — skip events that fall entirely
   outside working hours (default on).
+- **`--max-deletes N`** — skip any mirror pass that would delete more than N blocks (default: no
+  limit). N must be 0 or more; `0` skips any pass that would delete anything. Deletes from `--cleanup` count too. A source that suddenly loses that many events can't be
+  trusted for its creates or updates either, so the whole pass is skipped, not just the deletes. The
+  other passes still run, and then the run exits non-zero so the problem gets noticed. To apply a
+  deliberate large clean-up, run once by hand without the option. With `--dry-run`, the skip is
+  logged but the run doesn't fail. For agent runs, the warning and the failure are written to
+  `~/Library/Logs/calque.log`.
 - **`--dry-run`** — log the plan without writing any changes.
 - **`--list-calendars`** — print every calendar's account-qualified name and exit.
 - **`--install SECONDS`** — install a `launchd` agent that runs this same command every SECONDS,

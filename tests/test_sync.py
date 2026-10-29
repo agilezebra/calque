@@ -8,8 +8,9 @@ import pytest
 
 from calque import sync
 from calque.config import Config
-from calque.model import Event, Mirror, Participation, Status, Window
-from calque.sync import mirror, reconcile, synchronise, to_mirrors
+from calque.errors import DeleteLimitError
+from calque.model import Event, Mirror, Participation, Plan, Status, Window
+from calque.sync import exceeds, mirror, reconcile, synchronise, to_mirrors
 
 
 @pytest.fixture
@@ -76,6 +77,28 @@ def test_reconcile_updates_when_times_move(start: datetime) -> None:
 def test_reconcile_leaves_unchanged_alone(start: datetime) -> None:
     same = {"one": block("one", start)}
     assert reconcile(same, dict(same)).empty
+
+
+def deleting(count: int, start: datetime) -> Plan:
+    """A plan that only deletes ``count`` blocks."""
+    return Plan(create=(), update=(), delete=tuple(block(str(n), start) for n in range(count)))
+
+
+def test_exceeds_never_trips_without_a_limit(start: datetime) -> None:
+    assert not exceeds(deleting(100, start), None)
+
+
+def test_exceeds_allows_deletes_up_to_the_limit(start: datetime) -> None:
+    assert not exceeds(deleting(3, start), 3)
+
+
+def test_exceeds_trips_one_over_the_limit(start: datetime) -> None:
+    assert exceeds(deleting(4, start), 3)
+
+
+def test_exceeds_trips_on_any_delete_with_a_zero_limit(start: datetime) -> None:
+    assert exceeds(deleting(1, start), 0)
+    assert not exceeds(deleting(0, start), 0)
 
 
 def calendar(qualified: str) -> Mock:
@@ -154,10 +177,38 @@ def test_mirror_only_writes_whitelisted_events_from_a_source_with_include_patter
     assert [block.source for block in created] == ["House Viewing (graham busy)"]
 
 
+def orphaned(qualified: str, count: int, start: datetime) -> Mock:
+    """A stand-in target holding ``count`` mirror blocks whose source events have all gone."""
+    target = calendar(qualified)
+    target.mirrors.return_value = {f"gone-{n}": block(f"gone-{n}", start) for n in range(count)}
+    return target
+
+
+def test_mirror_skips_a_pass_deleting_more_than_the_limit(start: datetime, caplog: pytest.LogCaptureFixture) -> None:
+    source, target = calendar("Personal.Home"), orphaned("Work.Office", 3, start)
+    assert mirror(source, target, Config(max_deletes=2), Window(start, start + timedelta(days=1)))
+    target.apply.assert_not_called()
+    assert "Personal.Home -> Work.Office: skipped, 3 deletes exceed the limit of 2" in caplog.text
+
+
+def test_mirror_applies_a_pass_within_the_limit(start: datetime) -> None:
+    source, target = calendar("Personal.Home"), orphaned("Work.Office", 2, start)
+    assert not mirror(source, target, Config(max_deletes=2), Window(start, start + timedelta(days=1)))
+    assert len(target.apply.call_args.args[0].delete) == 2
+
+
+def test_mirror_warns_of_an_over_limit_pass_on_a_dry_run(start: datetime, caplog: pytest.LogCaptureFixture) -> None:
+    source, target = calendar("Personal.Home"), orphaned("Work.Office", 3, start)
+    config = Config(max_deletes=2, dry_run=True)
+    assert not mirror(source, target, config, Window(start, start + timedelta(days=1)))
+    target.apply.assert_not_called()
+    assert "skipped, 3 deletes exceed the limit of 2" in caplog.text
+
+
 def test_synchronise_collects_each_auxiliary_into_the_primary_then_fans_out(monkeypatch: pytest.MonkeyPatch) -> None:
     resolved = {title: calendar(title) for title in ("Personal", "Work", "Side")}
     monkeypatch.setattr(sync, "CalendarStore", Mock(return_value=Mock(calendar=lambda title: resolved[title])))
-    passes = Mock()
+    passes = Mock(return_value=False)
     monkeypatch.setattr(sync, "mirror", passes)
     config = Config()
     synchronise(config, ["Personal", "Work", "Side"])
@@ -172,7 +223,7 @@ def test_synchronise_collects_each_auxiliary_into_the_primary_then_fans_out(monk
 def test_synchronise_does_not_fan_out_to_a_muted_calendar(monkeypatch: pytest.MonkeyPatch) -> None:
     resolved = {title: calendar(title) for title in ("Personal", "Work", "Side")}
     monkeypatch.setattr(sync, "CalendarStore", Mock(return_value=Mock(calendar=lambda title: resolved[title])))
-    passes = Mock()
+    passes = Mock(return_value=False)
     monkeypatch.setattr(sync, "mirror", passes)
     config = Config(muted=frozenset({"Side"}))
     synchronise(config, ["Personal", "Work", "Side"])
@@ -185,9 +236,21 @@ def test_synchronise_does_not_fan_out_to_a_muted_calendar(monkeypatch: pytest.Mo
 def test_synchronise_muting_the_primary_skips_collection(monkeypatch: pytest.MonkeyPatch) -> None:
     resolved = {title: calendar(title) for title in ("Personal", "Work")}
     monkeypatch.setattr(sync, "CalendarStore", Mock(return_value=Mock(calendar=lambda title: resolved[title])))
-    passes = Mock()
+    passes = Mock(return_value=False)
     monkeypatch.setattr(sync, "mirror", passes)
     config = Config(muted=frozenset({"Personal"}))
     synchronise(config, ["Personal", "Work"])
     # Nothing is mirrored into the primary; it is only fanned out to the auxiliary.
     passes.assert_called_once_with(resolved["Personal"], resolved["Work"], config, passes.call_args.args[3])
+
+
+def test_synchronise_runs_every_pass_before_failing_on_a_skipped_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    resolved = {title: calendar(title) for title in ("Personal", "Work", "Side")}
+    monkeypatch.setattr(sync, "CalendarStore", Mock(return_value=Mock(calendar=lambda title: resolved[title])))
+    # Only the first pass, Work into Personal, is over the limit.
+    passes = Mock(side_effect=[True, False, False, False])
+    monkeypatch.setattr(sync, "mirror", passes)
+    config = Config(max_deletes=5)
+    with pytest.raises(DeleteLimitError, match="more than 5 "):
+        synchronise(config, ["Personal", "Work", "Side"])
+    assert passes.call_count == 4

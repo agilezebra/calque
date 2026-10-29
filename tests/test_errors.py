@@ -1,6 +1,6 @@
 """Tests for the exception hierarchy and the message each error composes from its value."""
 
-from calque.errors import AccessError, CalendarError, CalqueError, WriteError
+from calque.errors import AccessError, CalendarError, CalqueError, DeleteLimitError, WriteError
 
 
 def test_access_error_reports_the_authorisation_status() -> None:
@@ -19,3 +19,11 @@ def test_write_error_includes_the_underlying_detail() -> None:
     exception = WriteError("disk full")
     assert isinstance(exception, CalqueError)
     assert "disk full" in str(exception)
+
+
+def test_delete_limit_error_names_the_limit() -> None:
+    exception = DeleteLimitError(5)
+    assert isinstance(exception, CalqueError)
+    message = str(exception)
+    assert "5" in message
+    assert "without --max-deletes" in message
