@@ -56,7 +56,8 @@ def mirror(source: Calendar, target: Calendar, config: Config, window: Window) -
         to_mirrors(included(source.events(window), exclusions), title, source.qualified),
         target.mirrors(window, source.qualified),
     )
-    logging.info("%s -> %s: %s", source.qualified, target.qualified, plan)
+    level = logging.DEBUG if plan.empty and not config.dry_run else logging.INFO
+    logging.log(level, "%s -> %s: %s", source.qualified, target.qualified, plan)
 
     skipped = exceeds(plan, config.max_deletes)
     if skipped:

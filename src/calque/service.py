@@ -54,19 +54,24 @@ def launchctl(*arguments: str, ignore_errors: bool = False) -> None:
         raise ServiceError(result.stderr.strip() or result.returncode)
 
 
-def install(arguments: list[str], interval: int, *, label: str = LABEL) -> None:
+def install(arguments: list[str], interval: int, *, log_file: Path | None = None, label: str = LABEL) -> None:
     """Author the agent plist for the sync command in ``arguments`` and load it into launchd.
 
     The ``--install`` flag and the interval value following it are sliced out so the agent re-runs the plain
     sync, and the program is this executable resolved to an absolute path, since launchd does not search PATH.
     The installing shell's PATH is passed to the agent so a bare ``--on-failure`` command name still resolves.
+    Unless ``log_file`` (the parsed ``--log-file`` already in ``arguments``) is given, the agent logs to a rotating ``calque.log``; launchd's
+    own capture goes to ``calque.launchd.log``, which only sees output from before logging is configured.
     """
     index = arguments.index("--install")
-    program = [os.path.realpath(sys.argv[0]), *arguments[:index], *arguments[index + 2 :]]
+    logs = Path.home() / "Library" / "Logs"
+    # The default log file goes first so a ``--`` in the user's arguments cannot turn it into calendar names.
+    default = ["--log-file", str(logs / "calque.log")] if log_file is None else []
+    program = [os.path.realpath(sys.argv[0]), *default, *arguments[:index], *arguments[index + 2 :]]
     target = location(label)
     target.parent.mkdir(parents=True, exist_ok=True)
     with target.open("wb") as file:
-        log = Path.home() / "Library" / "Logs" / "calque.log"
+        log = logs / "calque.launchd.log"
         plistlib.dump(properties(program, interval, log, label=label, path=os.environ.get("PATH")), file)
     launchctl("bootout", f"{domain()}/{label}", ignore_errors=True)
     launchctl("bootstrap", domain(), str(target))
