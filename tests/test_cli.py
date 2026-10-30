@@ -1,6 +1,10 @@
 """Tests for the command-line boundary: argument parsing, the options-to-config projection, and exit codes."""
 
+import logging
+import logging.handlers
 import sys
+from collections.abc import Iterator
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -248,7 +252,15 @@ def test_main_installs_an_agent_from_the_whole_command(monkeypatch: pytest.Monke
     monkeypatch.setattr(cli, "install", spy)
     command = ["--install", "900", "--no-exclude-clashes", "Personal", "Work"]
     assert cli.main(command) == 0
-    spy.assert_called_once_with(command, 900)
+    spy.assert_called_once_with(command, 900, log_file=None)
+
+
+def test_main_passes_the_parsed_log_file_to_install(monkeypatch: pytest.MonkeyPatch) -> None:
+    spy = Mock(return_value="/agent.plist")
+    monkeypatch.setattr(cli, "install", spy)
+    command = ["--install", "900", "--log-fi=/var/log/mine.log", "Personal", "Work"]  # an abbreviation still counts
+    assert cli.main(command) == 0
+    spy.assert_called_once_with(command, 900, log_file=Path("/var/log/mine.log"))
 
 
 def test_main_uninstalls_the_agent(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -359,3 +371,85 @@ def test_main_does_not_alert_on_an_uninstall_failure(
     assert cli.main(["--uninstall", "--notify-on-failure", "--on-failure", "logger -t calque"]) == 1
     notify.assert_not_called()
     hook.assert_not_called()
+
+
+@pytest.fixture
+def root_handlers() -> Iterator[None]:
+    """Restore the root logger's handlers and level after a test, closing any handler the test added."""
+    original, level = logging.root.handlers[:], logging.root.level
+    yield
+    for handler in logging.root.handlers[:]:
+        if handler not in original:
+            logging.root.removeHandler(handler)
+            handler.close()
+    logging.root.handlers[:] = original
+    logging.root.setLevel(level)
+
+
+def test_parse_arguments_defaults_log_file_to_none() -> None:
+    assert cli.parse_arguments(["Personal", "Work"]).log_file is None
+
+
+def test_parse_arguments_reads_the_log_file_as_a_path() -> None:
+    parsed = cli.parse_arguments(["--log-file", "logs/calque.log", "Personal", "Work"])
+    assert parsed.log_file == Path("logs/calque.log")
+
+
+def test_parse_arguments_expands_a_home_relative_log_file() -> None:
+    parsed = cli.parse_arguments(["--log-file=~/calque.log", "Personal", "Work"])
+    assert parsed.log_file == Path.home() / "calque.log"
+
+
+def test_parse_arguments_rejects_a_relative_log_file_for_an_install() -> None:
+    arguments = ["--install", "900", "--log-file", "logs/calque.log", "Personal", "Work"]
+    with pytest.raises(SystemExit):
+        cli.parse_arguments(arguments)
+
+
+@pytest.mark.usefixtures("root_handlers")
+def test_main_writes_its_log_to_the_log_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(cli, "synchronise", Mock(side_effect=CalendarError("Work")))
+    log_file = tmp_path / "logs" / "calque.log"  # a missing parent directory is created
+    assert cli.main(["--log-file", str(log_file), "Personal", "Work"]) == 1
+    assert "ERROR: calque failed:" in log_file.read_text()
+
+
+@pytest.mark.usefixtures("root_handlers")
+def test_main_reports_an_install_failure_on_stderr_not_the_log_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(cli, "install", Mock(side_effect=ServiceError("bootstrap failed")))
+    log_file = tmp_path / "calque.log"
+    assert cli.main(["--install", "900", "--log-file", str(log_file), "Personal", "Work"]) == 1
+    assert not log_file.exists()
+    assert "bootstrap failed" in caplog.text
+
+
+@pytest.mark.usefixtures("root_handlers")
+def test_configure_logging_uses_a_rotating_handler_with_the_configured_limits(tmp_path: Path) -> None:
+    cli.configure_logging("info", tmp_path / "calque.log")
+    [handler] = logging.root.handlers
+    assert isinstance(handler, logging.handlers.RotatingFileHandler)
+    assert handler.maxBytes == cli.LOG_FILE_MAX_BYTES == 1_000_000
+    assert handler.backupCount == cli.LOG_FILE_BACKUP_COUNT == 3
+
+
+@pytest.mark.usefixtures("root_handlers")
+def test_configure_logging_without_a_file_adds_no_file_handler() -> None:
+    logging.root.handlers[:] = []  # as at process start; basicConfig leaves an already configured root alone
+    cli.configure_logging("debug", None)
+    assert logging.root.level == logging.DEBUG
+    assert not [handler for handler in logging.root.handlers if isinstance(handler, logging.FileHandler)]
+
+
+@pytest.mark.usefixtures("root_handlers")
+def test_main_falls_back_to_stderr_when_the_log_file_cannot_be_opened(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    synchronise = Mock()
+    monkeypatch.setattr(cli, "synchronise", synchronise)
+    blocker = tmp_path / "file"
+    blocker.write_text("")  # a regular file where the log's parent directory should be
+    assert cli.main(["--log-file", str(blocker / "calque.log"), "Personal", "Work"]) == 0
+    synchronise.assert_called_once()
+    assert "cannot write to log file" in caplog.text

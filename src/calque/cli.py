@@ -1,6 +1,7 @@
 """Command-line entry point: parse options into a configuration and drive a synchronisation run."""
 
 import logging
+import logging.handlers
 import re
 import shlex
 import sys
@@ -14,6 +15,7 @@ from argparse import (
 )
 from collections.abc import Iterable, Sequence
 from dataclasses import fields
+from pathlib import Path
 from typing import Any, cast
 
 from calque import alert
@@ -23,6 +25,10 @@ from calque.model import Participation
 from calque.service import install, uninstall
 from calque.store import CalendarStore
 from calque.sync import synchronise
+
+LOG_FILE_MAX_BYTES = 1_000_000
+LOG_FILE_BACKUP_COUNT = 3
+LOG_FORMAT = "%(asctime)s:%(levelname)s: %(message)s"
 
 
 class CompilePatterns(Action):
@@ -129,6 +135,11 @@ class DefaultsHelpFormatter(ArgumentDefaultsHelpFormatter):
         return action.help if action.help and "default: " in action.help else super()._get_help_string(action)
 
 
+def expanded_path(value: str) -> Path:
+    """Read a path option, expanding a leading ``~`` the shell left alone, as in ``--log-file=~/calque.log``."""
+    return Path(value).expanduser()
+
+
 def parse_arguments(arguments: list[str] | None) -> Namespace:
     """Build the parser and parse the given command-line arguments."""
     defaults = Config()
@@ -202,6 +213,15 @@ def parse_arguments(arguments: list[str] | None) -> Namespace:
     )
     parser.add_argument("--uninstall", action="store_true", help="remove the installed launchd agent and exit")
     parser.add_argument("--logging", default="info", help="set the logging level")
+    parser.add_argument(
+        "--log-file",
+        type=expanded_path,
+        metavar="PATH",
+        help=(
+            f"log to PATH instead of stderr, rotating it at {LOG_FILE_MAX_BYTES:,} bytes and keeping "
+            f"{LOG_FILE_BACKUP_COUNT} backups (default: None)"
+        ),
+    )
     parser.add_argument(
         "--notify-on-failure",
         action="store_true",
@@ -280,6 +300,9 @@ def parse_arguments(arguments: list[str] | None) -> Namespace:
     # --list-calendars and --uninstall stand alone; a sync or an install needs a primary and at least one auxiliary.
     if len(options.calendars) <= 1 and not (options.list_calendars or options.uninstall):
         parser.error("at least two calendars are required: a primary and some auxiliary calendars to mirror with")
+    # launchd runs the agent from /, so a relative log path would point somewhere it can't write.
+    if options.install is not None and options.log_file is not None and not options.log_file.is_absolute():
+        parser.error("--log-file must be an absolute path when used with --install")
     return options
 
 
@@ -315,18 +338,38 @@ def run_synchronise(options: Namespace) -> int:
     return 1
 
 
+def configure_logging(level: str, log_file: Path | None) -> None:
+    """Log at the given level to stderr, or to a size-capped rotating file when one is given."""
+    if log_file is None:
+        logging.basicConfig(level=level.upper(), format=LOG_FORMAT)
+        return
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    handler = logging.handlers.RotatingFileHandler(
+        log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT
+    )
+    # force: an explicitly requested file replaces any handler already on the root logger.
+    logging.basicConfig(level=level.upper(), format=LOG_FORMAT, handlers=[handler], force=True)
+
+
 def main(arguments: list[str] | None = None) -> int:
     """Dispatch one calque invocation — list, install, uninstall, or sync — and return a process exit code."""
     arguments = sys.argv[1:] if arguments is None else arguments
     options = parse_arguments(arguments)
-    logging.basicConfig(level=options.logging.upper(), format="%(asctime)s:%(levelname)s: %(message)s")
+    # The log file is the agent's sync log: an interactive --install still reports its result on stderr.
+    log_file = None if options.install is not None else options.log_file
+    try:
+        configure_logging(options.logging, log_file)
+    except OSError as exception:
+        # An unwritable log file must not stop the run: log to stderr instead, which launchd still captures.
+        configure_logging(options.logging, None)
+        logging.warning("cannot write to log file %s, logging to stderr: %s", log_file, exception)
 
     try:
         if options.list_calendars:
             for name in CalendarStore().qualified_names():
                 print(name)
         elif options.install is not None:
-            install(arguments, options.install)
+            install(arguments, options.install, log_file=options.log_file)
         elif options.uninstall:
             uninstall()
         else:
