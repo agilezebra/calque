@@ -2,6 +2,7 @@
 
 import logging
 import re
+import shlex
 import sys
 from argparse import (
     Action,
@@ -15,6 +16,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import fields
 from typing import Any, cast
 
+from calque import alert
 from calque.config import Config
 from calque.errors import CalqueError
 from calque.model import Participation
@@ -101,9 +103,22 @@ def non_negative_int(value: str) -> int:
     """Parse a whole number of zero or more, rejecting a negative one."""
     number = int(value)
     if number < 0:
-        msg = f"must be 0 or more, not {number}"
-        raise ArgumentTypeError(msg)
+        message = f"must be 0 or more, not {number}"
+        raise ArgumentTypeError(message)
     return number
+
+
+def command(value: str) -> str:
+    """Check that a command splits into at least one word, rejecting an unclosed quote or a blank value."""
+    try:
+        words = shlex.split(value)
+    except ValueError as exception:
+        message = f"cannot split {value!r} into words: {exception}"
+        raise ArgumentTypeError(message) from exception
+    if not words:
+        message = "must name a command to run"
+        raise ArgumentTypeError(message)
+    return value
 
 
 class DefaultsHelpFormatter(ArgumentDefaultsHelpFormatter):
@@ -188,6 +203,17 @@ def parse_arguments(arguments: list[str] | None) -> Namespace:
     parser.add_argument("--uninstall", action="store_true", help="remove the installed launchd agent and exit")
     parser.add_argument("--logging", default="info", help="set the logging level")
     parser.add_argument(
+        "--notify-on-failure",
+        action="store_true",
+        help="post a macOS notification when a sync run fails",
+    )
+    parser.add_argument(
+        "--on-failure",
+        type=command,
+        metavar="COMMAND",
+        help="run COMMAND, with the failure message appended as its last argument, when a sync run fails (default: None)",
+    )
+    parser.add_argument(
         "--exclude-patterns",
         nargs="+",
         action=CompilePatterns,
@@ -268,6 +294,27 @@ def to_config(options: Namespace) -> Config:
     )
 
 
+def run_synchronise(options: Namespace) -> int:
+    """Run one synchronisation, alerting through the configured channels and returning 1 if it fails."""
+    try:
+        synchronise(to_config(options), options.calendars)
+    except CalqueError as exception:
+        # An expected, user-facing failure: a traceback would be noise.
+        logging.error("calque failed: %s", exception)  # NOSONAR(S8572)
+        message = f"calque failed: {exception}"
+    except Exception as exception:
+        # An unattended run must alert on any failure rather than crash with only a traceback in the log.
+        logging.exception("calque failed unexpectedly")
+        message = f"calque failed unexpectedly: {exception}"
+    else:
+        return 0
+    if options.notify_on_failure:
+        alert.notify(message)
+    if options.on_failure:
+        alert.hook(options.on_failure, message)
+    return 1
+
+
 def main(arguments: list[str] | None = None) -> int:
     """Dispatch one calque invocation — list, install, uninstall, or sync — and return a process exit code."""
     arguments = sys.argv[1:] if arguments is None else arguments
@@ -283,7 +330,7 @@ def main(arguments: list[str] | None = None) -> int:
         elif options.uninstall:
             uninstall()
         else:
-            synchronise(to_config(options), options.calendars)
+            return run_synchronise(options)
     except CalqueError as exception:
         # An expected, user-facing failure: a traceback would be noise.
         logging.error("calque failed: %s", exception)  # NOSONAR(S8572)

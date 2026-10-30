@@ -261,3 +261,101 @@ def test_main_uninstalls_the_agent(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_main_reports_a_service_error_with_a_nonzero_code(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli, "uninstall", Mock(side_effect=ServiceError("boom")))
     assert cli.main(["--uninstall"]) == 1
+
+
+def test_parse_arguments_defaults_alerts_off() -> None:
+    parsed = cli.parse_arguments(["Personal", "Work"])
+    assert parsed.notify_on_failure is False
+    assert parsed.on_failure is None
+
+
+def test_parse_arguments_reads_the_alert_options() -> None:
+    parsed = cli.parse_arguments(["--notify-on-failure", "--on-failure", "ntfy publish calque", "Personal", "Work"])
+    assert parsed.notify_on_failure is True
+    assert parsed.on_failure == "ntfy publish calque"
+
+
+@pytest.mark.parametrize("value", ["ntfy publish 'topic", "", "   "])
+def test_parse_arguments_rejects_an_unusable_failure_command(value: str) -> None:
+    with pytest.raises(SystemExit):
+        cli.parse_arguments(["--on-failure", value, "Personal", "Work"])
+
+
+@pytest.fixture
+def alerts(monkeypatch: pytest.MonkeyPatch) -> tuple[Mock, Mock]:
+    """Replace the notification and hook alerts with mocks, returned in that order."""
+    notify, hook = Mock(), Mock()
+    monkeypatch.setattr("calque.alert.notify", notify)
+    monkeypatch.setattr("calque.alert.hook", hook)
+    return notify, hook
+
+
+ALERTING = ["--notify-on-failure", "--on-failure", "logger -t calque", "Personal", "Work"]
+
+
+def test_main_alerts_on_a_sync_error(monkeypatch: pytest.MonkeyPatch, alerts: tuple[Mock, Mock]) -> None:
+    notify, hook = alerts
+    monkeypatch.setattr(cli, "synchronise", Mock(side_effect=CalendarError("Work")))
+    assert cli.main(ALERTING) == 1
+    message = notify.call_args.args[0]
+    assert "Work" in message
+    hook.assert_called_once_with("logger -t calque", message)
+
+
+def test_main_alerts_on_a_delete_limit_error(monkeypatch: pytest.MonkeyPatch, alerts: tuple[Mock, Mock]) -> None:
+    notify, hook = alerts
+    monkeypatch.setattr(cli, "synchronise", Mock(side_effect=DeleteLimitError(5)))
+    assert cli.main(ALERTING) == 1
+    message = notify.call_args.args[0]
+    assert "more than 5 " in message
+    hook.assert_called_once_with("logger -t calque", message)
+
+
+def test_main_catches_and_alerts_on_an_unexpected_error(
+    monkeypatch: pytest.MonkeyPatch, alerts: tuple[Mock, Mock], caplog: pytest.LogCaptureFixture
+) -> None:
+    notify, hook = alerts
+    monkeypatch.setattr(cli, "synchronise", Mock(side_effect=RuntimeError("kaboom")))
+    assert cli.main(ALERTING) == 1
+    message = notify.call_args.args[0]
+    assert "kaboom" in message
+    hook.assert_called_once_with("logger -t calque", message)
+    assert any(record.exc_info for record in caplog.records)  # logged with its traceback
+
+
+def test_main_returns_one_on_an_unexpected_error_without_alerts(
+    monkeypatch: pytest.MonkeyPatch, alerts: tuple[Mock, Mock]
+) -> None:
+    notify, hook = alerts
+    monkeypatch.setattr(cli, "synchronise", Mock(side_effect=RuntimeError("kaboom")))
+    assert cli.main(["Personal", "Work"]) == 1
+    notify.assert_not_called()
+    hook.assert_not_called()
+
+
+def test_main_does_not_alert_on_success(monkeypatch: pytest.MonkeyPatch, alerts: tuple[Mock, Mock]) -> None:
+    notify, hook = alerts
+    monkeypatch.setattr(cli, "synchronise", Mock())
+    assert cli.main(ALERTING) == 0
+    notify.assert_not_called()
+    hook.assert_not_called()
+
+
+def test_main_does_not_alert_when_no_alert_is_configured(
+    monkeypatch: pytest.MonkeyPatch, alerts: tuple[Mock, Mock]
+) -> None:
+    notify, hook = alerts
+    monkeypatch.setattr(cli, "synchronise", Mock(side_effect=CalendarError("Work")))
+    assert cli.main(["Personal", "Work"]) == 1
+    notify.assert_not_called()
+    hook.assert_not_called()
+
+
+def test_main_does_not_alert_on_an_uninstall_failure(
+    monkeypatch: pytest.MonkeyPatch, alerts: tuple[Mock, Mock]
+) -> None:
+    notify, hook = alerts
+    monkeypatch.setattr(cli, "uninstall", Mock(side_effect=ServiceError("boom")))
+    assert cli.main(["--uninstall", "--notify-on-failure", "--on-failure", "logger -t calque"]) == 1
+    notify.assert_not_called()
+    hook.assert_not_called()

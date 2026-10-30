@@ -200,9 +200,11 @@ def test_mirror_applies_a_pass_within_the_limit(start: datetime) -> None:
 def test_mirror_warns_of_an_over_limit_pass_on_a_dry_run(start: datetime, caplog: pytest.LogCaptureFixture) -> None:
     source, target = calendar("Personal.Home"), orphaned("Work.Office", 3, start)
     config = Config(max_deletes=2, dry_run=True)
+    caplog.set_level("INFO")
     assert not mirror(source, target, config, Window(start, start + timedelta(days=1)))
     target.apply.assert_not_called()
     assert "skipped, 3 deletes exceed the limit of 2" in caplog.text
+    assert "dry run: no changes written" in caplog.text
 
 
 def test_synchronise_collects_each_auxiliary_into_the_primary_then_fans_out(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -244,11 +246,20 @@ def test_synchronise_muting_the_primary_skips_collection(monkeypatch: pytest.Mon
     passes.assert_called_once_with(resolved["Personal"], resolved["Work"], config, passes.call_args.args[3])
 
 
-def test_synchronise_runs_every_pass_before_failing_on_a_skipped_one(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    "skips",
+    [
+        pytest.param([True, False, False, False], id="collecting Work into Personal"),
+        pytest.param([False, False, False, True], id="fanning Personal out to Side"),
+    ],
+)
+def test_synchronise_runs_every_pass_before_failing_on_a_skipped_one(
+    monkeypatch: pytest.MonkeyPatch, skips: list[bool]
+) -> None:
     resolved = {title: calendar(title) for title in ("Personal", "Work", "Side")}
     monkeypatch.setattr(sync, "CalendarStore", Mock(return_value=Mock(calendar=lambda title: resolved[title])))
-    # Only the first pass, Work into Personal, is over the limit.
-    passes = Mock(side_effect=[True, False, False, False])
+    # Exactly one pass is over the limit, either while collecting into the primary or while fanning out.
+    passes = Mock(side_effect=skips)
     monkeypatch.setattr(sync, "mirror", passes)
     config = Config(max_deletes=5)
     with pytest.raises(DeleteLimitError, match="more than 5 "):

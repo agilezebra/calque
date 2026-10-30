@@ -168,6 +168,55 @@ Remove it with:
 calque --uninstall
 ```
 
+### Failure alerts
+
+A failed agent run otherwise only shows up in `~/Library/Logs/calque.log`. Two options make it
+visible; they apply to a sync run, and `--install` carries them into the agent like any other option.
+A run counts as failed when calque reports an error (a calendar not found, a write EventKit refuses,
+a pass skipped by `--max-deletes`) or hits an unexpected one, which is also logged with its traceback.
+
+`--notify-on-failure` posts a macOS notification with the failure message:
+
+```sh
+calque "Acme Consulting.Acme Consulting" "MoSW.Calendar" \
+  --notify-on-failure \
+  --install 180
+```
+
+The notification comes from the Python interpreter running calque, so on first use it appears
+under that name (e.g. `python3.x`) in **System Settings → Notifications**, where you can allow it or
+change how it's shown.
+
+`--on-failure COMMAND` runs a command of your own instead, or as well. calque appends the failure
+message as the command's last argument, so tools that take the message last work directly.
+`--install` records your shell's `PATH` in the agent, so a command found by name when you install
+(such as one from Homebrew) is found by the scheduled runs too:
+
+```sh
+# a notification with terminal-notifier (brew install terminal-notifier)
+calque ... --on-failure "terminal-notifier -title calque -message"
+
+# a push to your phone via ntfy
+calque ... --on-failure "ntfy publish my-calque-alerts"
+
+# your own script, which receives the message as $1
+calque ... --on-failure "$HOME/bin/calque-failed.sh"
+```
+
+```sh
+#!/bin/sh
+# ~/bin/calque-failed.sh
+echo "$(date): $1" >> "$HOME/calque-failures.txt"
+```
+
+The command is split into words like a shell would, but it is **not** run through a shell, so
+pipes, redirects and `$VARIABLES` inside it are not expanded; put anything like that in a script.
+Your own shell still expands variables in a double-quoted value before calque sees it, as with
+`"$HOME/bin/…"` above, so don't single-quote a value that relies on one. A command calque can't
+split (an unclosed quote) or a blank one is rejected when you run or `--install` it.
+If the alert itself fails (the command is missing, exits non-zero or takes longer than 30 seconds),
+calque logs a warning and still exits non-zero for the original failure.
+
 ## Options
 
 - **`calendars`** (positional, two or more) — the calendars to sync, each a qualified name from
@@ -203,7 +252,8 @@ calque --uninstall
 - **`--max-deletes N`** — skip any mirror pass that would delete more than N blocks (default: no
   limit). N must be 0 or more; `0` skips any pass that would delete anything. Deletes from `--cleanup` count too. A source that suddenly loses that many events can't be
   trusted for its creates or updates either, so the whole pass is skipped, not just the deletes. The
-  other passes still run, and then the run exits non-zero so the problem gets noticed. To apply a
+  other passes still run, and then the run exits non-zero so the problem gets noticed, firing any
+  [failure alert](#failure-alerts) you've configured. To apply a
   deliberate large clean-up, run once by hand without the option. With `--dry-run`, the skip is
   logged but the run doesn't fail. For agent runs, the warning and the failure are written to
   `~/Library/Logs/calque.log`.
@@ -212,6 +262,10 @@ calque --uninstall
 - **`--install SECONDS`** — install a `launchd` agent that runs this same command every SECONDS,
   then exit.
 - **`--uninstall`** — remove the installed `launchd` agent and exit.
+- **`--notify-on-failure`** — post a macOS notification when a sync run fails (see
+  [Failure alerts](#failure-alerts)).
+- **`--on-failure COMMAND`** — run COMMAND when a sync run fails, with the failure message appended
+  as its last argument (see [Failure alerts](#failure-alerts)).
 - **`--logging LEVEL`** — logging level (default `info`; `debug` shows why each event was kept or
   excluded).
 Be careful not to place variadic options (`--mute`, `--exclude-patterns`, `--calendar-include-patterns`,

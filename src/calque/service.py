@@ -22,11 +22,18 @@ def location(label: str = LABEL) -> Path:
     return Path.home() / "Library" / "LaunchAgents" / f"{label}.plist"
 
 
-def properties(program: list[str], interval: int, log: Path, *, label: str = LABEL) -> dict[str, object]:
-    """Build the launchd property-list mapping for an agent running ``program`` every ``interval`` seconds."""
+def properties(
+    program: list[str], interval: int, log: Path, *, label: str = LABEL, path: str | None = None
+) -> dict[str, object]:
+    """Build the launchd property-list mapping for an agent running ``program`` every ``interval`` seconds.
+
+    A given ``path`` becomes the agent's PATH, so commands it runs (such as an ``--on-failure`` hook) resolve
+    as they did in the installing shell rather than against launchd's minimal default.
+    """
     return {
         "Label": label,
         "ProgramArguments": program,
+        **({"EnvironmentVariables": {"PATH": path}} if path else {}),
         "StartInterval": interval,
         "RunAtLoad": True,
         "StandardOutPath": str(log),
@@ -52,13 +59,15 @@ def install(arguments: list[str], interval: int, *, label: str = LABEL) -> None:
 
     The ``--install`` flag and the interval value following it are sliced out so the agent re-runs the plain
     sync, and the program is this executable resolved to an absolute path, since launchd does not search PATH.
+    The installing shell's PATH is passed to the agent so a bare ``--on-failure`` command name still resolves.
     """
     index = arguments.index("--install")
     program = [os.path.realpath(sys.argv[0]), *arguments[:index], *arguments[index + 2 :]]
     target = location(label)
     target.parent.mkdir(parents=True, exist_ok=True)
     with target.open("wb") as file:
-        plistlib.dump(properties(program, interval, Path.home() / "Library" / "Logs" / "calque.log", label=label), file)
+        log = Path.home() / "Library" / "Logs" / "calque.log"
+        plistlib.dump(properties(program, interval, log, label=label, path=os.environ.get("PATH")), file)
     launchctl("bootout", f"{domain()}/{label}", ignore_errors=True)
     launchctl("bootstrap", domain(), str(target))
     logging.info("installed launchd agent at %s", target)
