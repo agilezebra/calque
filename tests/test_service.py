@@ -21,7 +21,7 @@ def home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
 
 
 def test_properties_builds_the_expected_plist_mapping() -> None:
-    log = Path("/Users/me/Library/Logs/calque.log")
+    log = Path("/Users/me/Library/Logs/calque.launchd.log")
     plist = properties(["/bin/calque", "Personal", "Work"], 900, log, label="com.example.calque")
     assert plist == {
         "Label": "com.example.calque",
@@ -65,12 +65,36 @@ def test_install_embeds_the_executable_strips_the_flag_then_replaces_and_bootstr
 
     target = home / "Library" / "LaunchAgents" / "com.agilezebra.calque.plist"
     loaded = plistlib.loads(target.read_bytes())
-    assert loaded["ProgramArguments"] == [os.path.realpath("/opt/calque/bin/calque"), "Personal", "Work"]
+    assert loaded["ProgramArguments"] == [
+        os.path.realpath("/opt/calque/bin/calque"),
+        "--log-file",
+        str(home / "Library" / "Logs" / "calque.log"),
+        "Personal",
+        "Work",
+    ]
     assert loaded["StartInterval"] == 900
+    assert loaded["StandardOutPath"] == str(home / "Library" / "Logs" / "calque.launchd.log")
+    assert loaded["StandardErrorPath"] == str(home / "Library" / "Logs" / "calque.launchd.log")
     assert [arguments[0] for arguments in calls] == ["bootout", "bootstrap"]
 
 
-def test_install_keeps_the_failure_alert_options_in_the_program_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    "option",
+    [["--log-file", "/var/log/mine.log"], ["--log-file=/var/log/mine.log"], ["--log-fi", "/var/log/mine.log"]],
+)
+def test_install_keeps_a_user_supplied_log_file(monkeypatch: pytest.MonkeyPatch, option: list[str]) -> None:
+    arguments = [*option, "--install", "900", "Personal", "Work"]
+    monkeypatch.setattr(sys, "argv", ["/opt/calque/bin/calque", *arguments])
+    monkeypatch.setattr(service, "launchctl", Mock())
+    install(arguments, 900, log_file=Path("/var/log/mine.log"))
+
+    loaded = plistlib.loads(location().read_bytes())
+    assert loaded["ProgramArguments"] == [os.path.realpath("/opt/calque/bin/calque"), *option, "Personal", "Work"]
+
+
+def test_install_keeps_the_failure_alert_options_in_the_program_arguments(
+    home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     arguments = ["--notify-on-failure", "--on-failure", "cmd arg", "--install", "900", "Personal", "Work"]
     monkeypatch.setattr(sys, "argv", ["/opt/calque/bin/calque", *arguments])
     monkeypatch.setattr(service, "launchctl", Mock())
@@ -79,12 +103,26 @@ def test_install_keeps_the_failure_alert_options_in_the_program_arguments(monkey
     loaded = plistlib.loads(location().read_bytes())
     assert loaded["ProgramArguments"] == [
         os.path.realpath("/opt/calque/bin/calque"),
+        "--log-file",
+        str(home / "Library" / "Logs" / "calque.log"),
         "--notify-on-failure",
         "--on-failure",
         "cmd arg",
         "Personal",
         "Work",
     ]
+
+
+def test_install_puts_the_default_log_file_before_an_end_of_options_marker(
+    home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    arguments = ["--install", "900", "--", "Personal", "Work"]
+    monkeypatch.setattr(sys, "argv", ["/opt/calque/bin/calque", *arguments])
+    monkeypatch.setattr(service, "launchctl", Mock())
+    install(arguments, 900)
+
+    program = plistlib.loads(location().read_bytes())["ProgramArguments"]
+    assert program[1:] == ["--log-file", str(home / "Library" / "Logs" / "calque.log"), "--", "Personal", "Work"]
 
 
 def test_uninstall_boots_out_and_removes_the_plist(monkeypatch: pytest.MonkeyPatch) -> None:

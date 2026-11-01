@@ -5,7 +5,7 @@
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=agilezebra_calque&metric=coverage)](https://sonarcloud.io/summary/new_code?id=agilezebra_calque)
 
 Mirrors events between calendars as **anonymized busy blocks**, using your **local macOS calendar store**.
-Built for the case where your availability has to show up on calendars in different tenants (e.g. keeping a client Exchange calendar and a your company Google calendar in sync) without exposing undesirable event detail.
+Built for the case where your availability has to show up on calendars in different tenants (e.g. keeping a client Exchange calendar and your company Google calendar in sync) without exposing undesirable event detail.
 
 By design, this is **not** a cloud service. Because calendars are already subscribed in macOS, calque talks only to the local EventKit store. There is **no authentication** required against any of the calendar providers, and no use of their APIs. This makes it suitable for use with **government clients** and other sensitive tenants that **forbid third-party tool** access.
 
@@ -77,7 +77,7 @@ EventKit is gated by macOS privacy controls. Run calque with `--list-calendars` 
 run triggers a permission prompt; you grant access via a Ui dialog which is thereafter managed under
 **System Settings → Privacy & Security → Calendars** for the app running calque.
 In the first instance, this is your terminal. If you install calque as a `launchd` agent, the agent will not run under
-the the terminal and will ask separately for permission.
+the terminal and will ask separately for permission.
 Once granted, you can list every calendar's **account-qualified name** with:
 
 ```sh
@@ -121,8 +121,8 @@ This is a typical consultant setup. `Acme Consulting.Acme Consulting` is your co
 hub), `MoSW.Calendar` and `MoM.Calendar` are two client tenants, and `iCloud.Home` is your personal
 calendar you share with your partner. It mirrors all three into your company calendar, then fans your company calendar's combined availability back out to the two clients:
 
-- `--title-to "Acme Consulting.Acme Consulting" "{account}: {title}"`: in your *own* company
-  diary, show the real source account and subject, so you and your colleagues can see what each block actually is and where you are busy.
+- `--title-to "Acme Consulting.Acme Consulting" "{account}: {title}"`: in your company
+  diary, show the real source account and subject, so you and your colleagues can see what each block is and where you are busy.
 - `--title-from "iCloud.Home" "Busy"`: anything originating from your **personal** calendar is
   labelled just `Busy` wherever it lands, so home detail never leaks — not even into your company
   diary, which the `--title-to` rule would otherwise make detailed (a source `--title-from` override wins over a
@@ -133,7 +133,7 @@ calendar you share with your partner. It mirrors all three into your company cal
   diary; just the few commitments you've deliberately flagged show as busy. Without this, *every*
   accepted home event would mirror across.
 - Client calendars (`MoSW.Calendar`, `MoM.Calendar`) see only the default opaque `Busy (Acme Consulting calendar)` blocks, so neither sees the other's events, your home detail, or anything beyond the fact that you're busy.
-- `--mute "iCloud.Home"` — read your personal calendar as a source but never write blocks into it;
+- `--mute "iCloud.Home"`: read your personal calendar as a source but never write blocks into it;
   it stays untouched.
 
 The two clients (`MoSW.Calendar`, `MoM.Calendar`) receive only the default opaque `Busy (…)` blocks,
@@ -160,7 +160,16 @@ calque "Acme Consulting.Acme Consulting" "MoSW.Calendar" "MoM.Calendar" "iCloud.
   --install 180          # run every 3 minutes
 ```
 
-The agent writes its output, including any errors, to `~/Library/Logs/calque.log`.
+The agent logs to `~/Library/Logs/calque.log`. calque rotates that file itself at 1 MB and keeps
+3 backups (`calque.log.1` to `calque.log.3`), so the log stays under about 4 MB. Passes with no
+changes are logged at debug level, so idle runs barely grow the log at the default `info` level.
+Output from before logging starts, such as a startup traceback, goes to
+`~/Library/Logs/calque.launchd.log`. To log somewhere else, pass `--log-file` with `--install`.
+The path must be absolute, because the agent doesn't run from your current directory. If the log
+file can't be opened, calque logs to `calque.launchd.log` and the sync still runs.
+
+An agent installed by an earlier version of calque still writes to an unrotated log. Run the
+same `--install` command again to replace it.
 
 Remove it with:
 
@@ -170,8 +179,9 @@ calque --uninstall
 
 ### Failure alerts
 
-A failed agent run otherwise only shows up in `~/Library/Logs/calque.log`. Two options make it
-visible; they apply to a sync run, and `--install` carries them into the agent like any other option.
+By default, a failed agent run shows up only in the agent's log (`~/Library/Logs/calque.log`, or
+the `--log-file` you set). To be alerted as well, use one or both of the options below. They apply to a sync run, and
+`--install` passes them on to the agent.
 A run counts as failed when calque reports an error (a calendar not found, a write EventKit refuses,
 a pass skipped by `--max-deletes`) or hits an unexpected one, which is also logged with its traceback.
 
@@ -187,7 +197,7 @@ The notification comes from the Python interpreter running calque, so on first u
 under that name (e.g. `python3.x`) in **System Settings → Notifications**, where you can allow it or
 change how it's shown.
 
-`--on-failure COMMAND` runs a command of your own instead, or as well. calque appends the failure
+`--on-failure COMMAND` runs a command you choose, in place of the notification or alongside it. calque appends the failure
 message as the command's last argument, so tools that take the message last work directly.
 `--install` records your shell's `PATH` in the agent, so a command found by name when you install
 (such as one from Homebrew) is found by the scheduled runs too:
@@ -219,55 +229,61 @@ calque logs a warning and still exits non-zero for the original failure.
 
 ## Options
 
-- **`calendars`** (positional, two or more) — the calendars to sync, each a qualified name from
+- **`calendars`** (positional, two or more): the calendars to sync, each a qualified name from
   `--list-calendars`. The **first** is your primary calendar: every other is mirrored into it,
   and it is then mirrored back out to each.
-- **`--title TEMPLATE`** — default title template for every mirror block (default
+- **`--title TEMPLATE`**: default title template for every mirror block (default
   `Busy ({account} calendar)`). `{field}` placeholders are filled from the source event; see
   [Titles](#titles).
-- **`--title-to NAME TEMPLATE`** — title template used when writing **into** NAME's calendar.
+- **`--title-to NAME TEMPLATE`**: title template used when writing **into** NAME's calendar.
   Repeatable.
-- **`--title-from NAME TEMPLATE`** — title template for events read **from** NAME's calendar,
+- **`--title-from NAME TEMPLATE`**: title template for events read **from** NAME's calendar,
   wherever they land; **wins over** `--title-to`. Repeatable.
-- **`--mute NAME …`** — calendars to read as a source but never write blocks into.
-- **`--lookback DAYS`** — days before now to keep mirrored (default `1`). With `--cleanup`, this
+- **`--mute NAME …`**: calendars to read as a source but never write blocks into.
+- **`--lookback DAYS`**: days before now to keep mirrored (default `1`). With `--cleanup`, this
   instead bounds the window within which finished blocks are removed.
-- **`--lookahead DAYS`** — days after now to mirror (default `60`).
-- **`--cleanup`** / **`--no-cleanup`** — remove a mirror block once its event is over, instead of
+- **`--lookahead DAYS`**: days after now to mirror (default `60`).
+- **`--cleanup`** / **`--no-cleanup`**: remove a mirror block once its event is over, instead of
   keeping it for the lookback window (default off).
-- **`--statuses STATUS …`** — participation responses that count as busy and get mirrored, from
+- **`--statuses STATUS …`**: participation responses that count as busy and get mirrored, from
   `accepted`, `tentative`, `declined`, `pending`, `unknown` (default `accepted unknown`).
-- **`--exclude-patterns REGEX …`** — replace the default title-exclusion patterns (see
+- **`--exclude-patterns REGEX …`**: replace the default title-exclusion patterns (see
   [Exclusions](#exclusions)).
-- **`--calendar-include-patterns NAME REGEX …`** — whitelist NAME's calendar: mirror **only** its
+- **`--calendar-include-patterns NAME REGEX …`**: whitelist NAME's calendar: mirror **only** its
   events whose title matches one of the given patterns, dropping every other event from that one
   calendar. Give several patterns after a calendar to allow several markers, and repeat the option to
   whitelist several calendars. A calendar with no include pattern is unaffected. See
   [Exclusions](#exclusions).
-- **`--exclude-clashes`** / **`--no-exclude-clashes`** — skip a source event that overlaps a genuine
+- **`--exclude-clashes`** / **`--no-exclude-clashes`**: skip a source event that overlaps a genuine
   event already on the target (default on).
-- **`--exclude-all-day`** / **`--no-exclude-all-day`** — skip all-day events (default on).
-- **`--exclude-out-of-hours`** / **`--no-exclude-out-of-hours`** — skip events that fall entirely
+- **`--exclude-all-day`** / **`--no-exclude-all-day`**: skip all-day events (default on).
+- **`--exclude-out-of-hours`** / **`--no-exclude-out-of-hours`**: skip events that fall entirely
   outside working hours (default on).
-- **`--max-deletes N`** — skip any mirror pass that would delete more than N blocks (default: no
+- **`--max-deletes N`**: skip any mirror pass that would delete more than N blocks (default: no
   limit). N must be 0 or more; `0` skips any pass that would delete anything. Deletes from `--cleanup` count too. A source that suddenly loses that many events can't be
   trusted for its creates or updates either, so the whole pass is skipped, not just the deletes. The
   other passes still run, and then the run exits non-zero so the problem gets noticed, firing any
   [failure alert](#failure-alerts) you've configured. To apply a
   deliberate large clean-up, run once by hand without the option. With `--dry-run`, the skip is
-  logged but the run doesn't fail. For agent runs, the warning and the failure are written to
-  `~/Library/Logs/calque.log`.
-- **`--dry-run`** — log the plan without writing any changes.
-- **`--list-calendars`** — print every calendar's account-qualified name and exit.
-- **`--install SECONDS`** — install a `launchd` agent that runs this same command every SECONDS,
+  logged but the run doesn't fail. For agent runs, the warning and the failure are written to the
+  agent's log (`~/Library/Logs/calque.log` by default).
+- **`--dry-run`**: log the plan without writing any changes.
+- **`--list-calendars`**: print every calendar's account-qualified name and exit.
+- **`--install SECONDS`**: install a `launchd` agent that runs this same command every SECONDS,
   then exit.
-- **`--uninstall`** — remove the installed `launchd` agent and exit.
-- **`--notify-on-failure`** — post a macOS notification when a sync run fails (see
+- **`--uninstall`**: remove the installed `launchd` agent and exit.
+- **`--notify-on-failure`**: post a macOS notification when a sync run fails (see
   [Failure alerts](#failure-alerts)).
-- **`--on-failure COMMAND`** — run COMMAND when a sync run fails, with the failure message appended
+- **`--on-failure COMMAND`**: run COMMAND when a sync run fails, with the failure message appended
   as its last argument (see [Failure alerts](#failure-alerts)).
-- **`--logging LEVEL`** — logging level (default `info`; `debug` shows why each event was kept or
-  excluded).
+- **`--logging LEVEL`**: logging level (default `info`). `debug` adds why each event was kept or
+  excluded, and passes with nothing to change, which outside `--dry-run` are logged only at debug.
+- **`--log-file PATH`**: write the log to PATH instead of stderr, rotating it at 1 MB and keeping
+  3 backups. The parent directory is created if missing, and a leading `~` is expanded. If the file
+  can't be opened, calque logs to stderr instead. With `--install`, PATH must be absolute; `--install`
+  adds `--log-file ~/Library/Logs/calque.log` unless you give one. The file is for the agent's runs:
+  the `--install` command itself still reports to your terminal.
+
 Be careful not to place variadic options (`--mute`, `--exclude-patterns`, `--calendar-include-patterns`,
 `--statuses`) immediately before the calendar arguments, or they will swallow them.
 
@@ -284,15 +300,15 @@ names of calendars other than the primary (which we assume they already know).
 In addition to `--title`, two overrides control the title used for a calendar, both repeatable and
 both keyed on a calendar's qualified name:
 
-- `--title-to NAME TEMPLATE` — the title used when writing *into* NAME's calendar ("when putting
+- `--title-to NAME TEMPLATE`: the title used when writing *into* NAME's calendar ("when putting
   events into *this* diary, use this format").
-- `--title-from NAME TEMPLATE` — the title used for events read *from* NAME's calendar, wherever
+- `--title-from NAME TEMPLATE`: the title used for events read *from* NAME's calendar, wherever
   they land. A title-from override wins over a title-to one.
 
 Common use-cases:
 
-`--title-to` lets your *own* diary show real subjects while every client calendar still sees only
-opaque busy blocks (and so never sees detail of your own or other clients' events):
+`--title-to` lets your company diary show real subjects while every client calendar sees only
+opaque busy blocks, with no detail of your events or other clients' events.
 
 `--title-from` pins how one source always appears, regardless of the target. For example, feed a
 personal calendar into the company diary to block out home commitments, but keep those entries
@@ -313,32 +329,32 @@ builder and wiring it into `rules`.
 
 Current rules:
 
-- **By status** — only events with a busy status are mirrored. The default busy status is only
-  `accepted`, but you can override them on `Config`.
-- **Cancelled** — events the organiser has cancelled (EventKit reports them as cancelled, shown
+- **By status**: only events with a busy status are mirrored. The default busy statuses are
+  `accepted` and `unknown`; change them with `--statuses` (see [Status filtering](#status-filtering)).
+- **Cancelled**: events the organiser has cancelled (EventKit reports them as cancelled, shown
   struck through and greyed in Calendar.app) are never mirrored, so a meeting that's called off
-  drops its busy block instead of lingering.
-- **By title** — source events whose title matches any `--exclude-patterns` regular expression
+  loses its busy block.
+- **By title**: source events whose title matches any `--exclude-patterns` regular expression
   are skipped, so availability markers don't get mirrored as meetings. The default excludes a
   bare `Working` status block (`^Working$`) and any annual-leave marker (`\bA/L\b`). Pass one
   or more of your own patterns to replace the defaults.
-- **All-day** — all-day events (out-of-office banners, leave, public holidays) are skipped so
+- **All-day**: all-day events (out-of-office banners, leave, public holidays) are skipped so
   they don't blank out the whole day on the other calendar. On by default; `--no-exclude-all-day`.
-- **Out of hours** — events that fall entirely outside working hours are skipped, so only your
+- **Out of hours**: events that fall entirely outside working hours are skipped, so only your
   working day is mirrored. The window defaults to **Monday–Friday 08:00–18:00 local time**; an
   event that overlaps it at all (e.g. a 17:00–19:00 overrun) is still mirrored. On by default;
   `--no-exclude-out-of-hours`. The window itself (`work_days`, `work_start`, `work_end`) is set
   on `Config`.
-- **By clash** — a source event is skipped when the target calendar already has a genuine event
+- **By clash**: a source event is skipped when the target calendar already has a genuine event
   (not one of calque's own mirror blocks) overlapping any part of its slot, so calque never
   stacks a busy block on time you're already committed elsewhere. On by default; turn it off
   with `--no-exclude-clashes`.
-- **Unlisted** — the inverse of *by title*, scoped to a calendar. Where a calendar is given
+- **Unlisted**: the inverse of *by title*, scoped to a calendar. Where a calendar is given
   `--calendar-include-patterns`, only its events whose title matches one of those patterns are
   mirrored and every other event is dropped, turning that calendar into a whitelist. Calendars
   without an include pattern are unaffected. The whitelist is keyed on the **source** calendar, so
-  it filters that calendar's events as they're read; a target's own genuine events still count as
-  busy for clash detection regardless.
+  it filters that calendar's events as they're read; a target's genuine events still count as
+  busy for clash detection.
 
 Example: skip any event whose title is exactly `Working`, contains `A/L` as a whole word, or is `Lunch`, and don't skip events that clash with existing events on the target:
 
@@ -352,7 +368,7 @@ calque "Acme Consulting.Acme Consulting" "MoSW.Calendar" \
 Availability is mirrored in both directions by default for every calendar you list.
 If you want to read a calendar but not write into it, pass `--mute NAME` for that calendar.
 Note that if you mute the primary calendar, it will mirror its events into the other calendars,
-but will not not be able to mirror busy blocked between the other calendars - i.e. you have muted
+but will not be able to mirror busy blocks between the other calendars - i.e. you have muted
 the hub so it can't act as a hub for mirroring.
 
 ## Status filtering

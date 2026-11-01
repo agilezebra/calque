@@ -1,5 +1,6 @@
 """Tests for the reconciliation core, a single mirror pass, and the both-ways synchronisation run."""
 
+import logging
 import re
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock, call
@@ -205,6 +206,32 @@ def test_mirror_warns_of_an_over_limit_pass_on_a_dry_run(start: datetime, caplog
     target.apply.assert_not_called()
     assert "skipped, 3 deletes exceed the limit of 2" in caplog.text
     assert "dry run: no changes written" in caplog.text
+
+
+def plan_records(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    """The captured records of the pass's ``source -> target: plan`` line."""
+    return [record for record in caplog.records if record.getMessage().startswith("Personal.Home -> Work.Office: ")]
+
+
+def test_mirror_logs_an_empty_pass_at_debug(start: datetime, caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level("DEBUG")
+    mirror(calendar("Personal.Home"), calendar("Work.Office"), Config(), Window(start, start + timedelta(days=1)))
+    assert [record.levelno for record in plan_records(caplog)] == [logging.DEBUG]
+    assert not [record for record in caplog.records if record.levelno >= logging.INFO]
+
+
+def test_mirror_logs_a_pass_with_changes_at_info(start: datetime, caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level("INFO")
+    source, target = calendar("Personal.Home"), orphaned("Work.Office", 1, start)
+    mirror(source, target, Config(), Window(start, start + timedelta(days=1)))
+    assert [record.levelno for record in plan_records(caplog)] == [logging.INFO]
+
+
+def test_mirror_logs_an_empty_dry_run_pass_at_info(start: datetime, caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level("INFO")
+    config = Config(dry_run=True)
+    mirror(calendar("Personal.Home"), calendar("Work.Office"), config, Window(start, start + timedelta(days=1)))
+    assert [record.levelno for record in plan_records(caplog)] == [logging.INFO]
 
 
 def test_synchronise_collects_each_auxiliary_into_the_primary_then_fans_out(monkeypatch: pytest.MonkeyPatch) -> None:
